@@ -34,7 +34,7 @@
      -- Delete test server from installation.sql
      EXEC up_upsert_server 
          @servername = 'Mysql_test',
-         @delete = 0;
+         @delete = 1;
 
      -- Add a new MS SQL Server (uses Windows authentication by default)
      EXEC up_upsert_server 
@@ -66,11 +66,67 @@
      exec up_refresh_instances @remote_server='*'
      -- Refresh dblist for all databases on all live servers by this, or schedule this command as a SQL job:
      exec up_refresh_dblists @remote_server='*'
-5. **Call REST API**:
+## Core stored procedures:
+# up_call_sqlfunction Stored Procedure
+
+## Overview
+
+The `up_call_sqlfunction` stored procedure is a key component of the database automation platform, designed to execute SQL functions or queries across multiple SQL Server, MySQL, or PostgreSQL database instances in a distributed environment. It supports flexible targeting of servers, databases, instance types, and environments, with options for dry runs, debugging, logging, and error handling. The procedure integrates with external systems (e.g., Jira and Salesforce) for logging task outcomes and supports JSON-based input and output for configuration and results.
+
+This procedure is intended for long-running database tasks (e.g., schema migrations, index creation, or data cleanup) across thousands of databases on hundreds of instances in multiple global regions. It provides a robust mechanism to execute SQL commands, manage parallelism, and track execution status.
+
+## Prerequisites
+
+- **Database**: SQL Server (MSSQL) with access to the `serverlist`, `dblist`, `instance_types`, `environments`, and `sql_functions` tables.
+- **Permissions**: Execute permissions on the procedure and access to target databases.
+- **Dependencies**: The `up_exec_remote_sql` stored procedure for remote execution.
+- **Configuration**: Properly populated `serverlist` and `dblist` tables with server and database details (e.g., host, port, credentials, database provider).
+- **JSON Support**: SQL Server 2016 or later for JSON parsing (`ISJSON`, `JSON_VALUE`, `OPENJSON`).
+
+## Parameters
+
+| Parameter | Type | Description | Default Value |
+|-----------|------|-------------|---------------|
+| `@The_SQL` | `nvarchar(max)` | The SQL function name (from `sql_functions` table) or raw SQL query to execute. Required. | `''` |
+| `@json_input` | `nvarchar(max)` | JSON string containing configuration (e.g., server list, database list, arguments). Must be valid JSON. | `'{}'` |
+| `@json_return` | `nvarchar(max) OUTPUT` | JSON output containing灾
+
+System: The `[dbo].[up_call_sqlfunction]` stored procedure is a powerful tool for automating SQL execution across multiple database instances. Below is the continuation of the help documentation formatted for GitHub in Markdown, picking up from where the previous response was cut off due to the character limit. This completes the documentation with details on parameters, usage examples, return codes, and additional notes.
+
+```markdown
+| `@json_return` | `nvarchar(max) OUTPUT` | JSON output containing execution results, including status, server, database, affected rows, and errors. | `'{}'` |
+| `@error_msg` | `nvarchar(max) OUTPUT` | Error message if the procedure fails. | `''` |
+| `@servername_or_list` | `varchar(max)` | Comma-separated list of server names or `'*'` for all servers. | `''` |
+| `@dbname_or_list` | `nvarchar(max)` | Comma-separated list of database names, `'*'` for all databases, or `'default'` for default databases (e.g., `master` for MSSQL, `postgres` for PostgreSQL). | `''` |
+| `@return_type` | `nvarchar(100)` | Return format for results (`'json'` or empty for temp table). | `''` |
+| `@return_temp_table` | `varchar(128)` | Name of the temporary table to store results (e.g., `#tmp_default`). | `''` |
+| `@instance_types` | `varchar(4000)` | Comma-separated list of instance types or `'*'` for all. | `'*'` |
+| `@db_types` | `varchar(4000)` | Comma-separated list of database types (`MSSQL`, `MySQL`, `PostgreSQL`) or `'*'` for all. | `'*'` |
+| `@environment_or_list` | `nvarchar(max)` | Comma-separated list of environments or `'*'` for all. | `'*'` |
+| `@cmd_type` | `tinyint` | Command type (0 for SQL execution, others reserved for future use). | `0` |
+| `@dry_run` | `bit` | If `1`, simulate execution without running SQL. | `0` |
+| `@debug` | `bit` | If `1`, output debug information from `#remote_exec_content`. | `0` |
+| `@max_threads` | `int` | Maximum number of parallel threads for execution. Overrides server defaults. | `0` (uses server default, typically 5) |
+| `@timeout` | `int` | Timeout in seconds for each SQL execution. | `60` |
+| `@include_remote_info` | `bit` | If `1`, add server and database names to the return temp table. | `0` |
+| `@log` | `bit` | If `1`, log execution details to `remote_sql_log` table. | `1` |
+| `@stop_by_error` | `bit` | If `1`, stop execution on error. | `1` |
+| `@raise_error` | `bit` | If `1`, raise errors using `THROW`. | `0` |
+
+## Usage
+
+### Syntax
+```sql
+EXEC [dbo].[up_call_sqlfunction]
+    @The_SQL,
+    @json_input = '{}',
+    @json_return = '{}' OUTPUT,
+    @error_msg = '' OUTPUT
+    
+1. **Call REST API**:
    ```sql
     declare @api_return nvarchar(max),@api_uri varchar(4000)
 	set @api_uri='https://data.nasdaq.com/api/v3/datatables/NDW/EQTA?date=2025-08-29&symbol=GOOGL-US&api_key=JwPfRGfkZRN48zKfDTvL'
 	exec [up_call_rest_api] @api_url=@api_uri,@content='',@api_return=@api_return output
 	select @api_return
-
-      
+       
