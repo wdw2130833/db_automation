@@ -89,44 +89,85 @@ This procedure is intended for long-running database tasks (e.g., schema migrati
 |-----------|------|-------------|---------------|
 | `@The_SQL` | `nvarchar(max)` | The SQL function name (from `sql_functions` table) or raw SQL query to execute. Required. | `''` |
 | `@json_input` | `nvarchar(max)` | JSON string containing configuration (e.g., server list, database list, arguments). Must be valid JSON. | `'{}'` |
-| `@json_return` | `nvarchar(max) OUTPUT` | JSON output containing灾
-
-System: The `[dbo].[up_call_sqlfunction]` stored procedure is a powerful tool for automating SQL execution across multiple database instances. Below is the continuation of the help documentation formatted for GitHub in Markdown, picking up from where the previous response was cut off due to the character limit. This completes the documentation with details on parameters, usage examples, return codes, and additional notes.
-
-```markdown
 | `@json_return` | `nvarchar(max) OUTPUT` | JSON output containing execution results, including status, server, database, affected rows, and errors. | `'{}'` |
 | `@error_msg` | `nvarchar(max) OUTPUT` | Error message if the procedure fails. | `''` |
-| `@servername_or_list` | `varchar(max)` | Comma-separated list of server names or `'*'` for all servers. | `''` |
-| `@dbname_or_list` | `nvarchar(max)` | Comma-separated list of database names, `'*'` for all databases, or `'default'` for default databases (e.g., `master` for MSSQL, `postgres` for PostgreSQL). | `''` |
-| `@return_type` | `nvarchar(100)` | Return format for results (`'json'` or empty for temp table). | `''` |
-| `@return_temp_table` | `varchar(128)` | Name of the temporary table to store results (e.g., `#tmp_default`). | `''` |
-| `@instance_types` | `varchar(4000)` | Comma-separated list of instance types or `'*'` for all. | `'*'` |
-| `@db_types` | `varchar(4000)` | Comma-separated list of database types (`MSSQL`, `MySQL`, `PostgreSQL`) or `'*'` for all. | `'*'` |
-| `@environment_or_list` | `nvarchar(max)` | Comma-separated list of environments or `'*'` for all. | `'*'` |
-| `@cmd_type` | `tinyint` | Command type (0 for SQL execution, others reserved for future use). | `0` |
-| `@dry_run` | `bit` | If `1`, simulate execution without running SQL. | `0` |
-| `@debug` | `bit` | If `1`, output debug information from `#remote_exec_content`. | `0` |
-| `@max_threads` | `int` | Maximum number of parallel threads for execution. Overrides server defaults. | `0` (uses server default, typically 5) |
-| `@timeout` | `int` | Timeout in seconds for each SQL execution. | `60` |
-| `@include_remote_info` | `bit` | If `1`, add server and database names to the return temp table. | `0` |
-| `@log` | `bit` | If `1`, log execution details to `remote_sql_log` table. | `1` |
-| `@stop_by_error` | `bit` | If `1`, stop execution on error. | `1` |
-| `@raise_error` | `bit` | If `1`, raise errors using `THROW`. | `0` |
+
+### Key parameters support in `@json_input` 
+
+| Key name  | Type | Description | Default Value |
+|-----------|------|-------------|---------------|
+| `servername_or_list` | `varchar(max)` | Comma-separated list of server names or `'*'` for all servers. | `''` |
+| `dbname_or_list` | `nvarchar(max)` | Comma-separated list of database names, `'*'` for all databases, or `'default'` for default databases (e.g., `master` for MSSQL, `postgres` for PostgreSQL). | `''` |
+| `return_type` | `nvarchar(100)` | Return format for results (`'json'` or empty for temp table). | `''` |
+| `return_temp_table` | `varchar(128)` | Name of the temporary table to store return results (e.g., `#tmp_default`). create this temp table before call up_call_sqlfunction: <br> if object_id(''tempdb..#tmp_result'') is not null <br> drop table #tmp_result <br> create table #tmp_result (run_id uniqueidentifier) | `''` |
+| `instance_types` | `varchar(4000)` | Comma-separated list of instance types or `'*'` for all. | `'*'` |
+| `db_types` | `varchar(4000)` | Comma-separated list of database types (`MSSQL`, `MySQL`, `PostgreSQL`) or `'*'` for all. | `'*'` |
+| `environment_or_list` | `nvarchar(max)` | Comma-separated list of environments or `'*'` for all. | `'*'` |
+| `cmd_type` | `tinyint` | Command type (0 for SQL execution, 1 for sqlcmd, mysql or psql, 2 for bcp, mysqldump or pg_dump, others reserved for future use). | `0` |
+| `dry_run` | `bit` | If `1`, simulate execution without running SQL. | `0` |
+| `debug` | `bit` | If `1`, output debug information from `#remote_exec_content`. | `0` |
+| `max_threads` | `int` | Maximum number of parallel threads for execution. Overrides server defaults. | `0` (uses server default, typically 5) |
+| `timeout` | `int` | Timeout in seconds for each SQL execution. | `60` |
+| `include_remote_info` | `bit` | If `1`, add server and database names to the return temp table. | `0` |
+| `log` | `bit` | If `1`, log execution details to `remote_sql_log` table. | `1` |
+| `stop_by_error` | `bit` | If `1`, stop execution on error, ignore the rest of SQLs, only applied for MS SQL. | `1` |
+| `raise_error` | `bit` | If `1`, raise errors using `THROW`. | `0` |
 
 ## Usage
-
-### Syntax
+Please check the detail usage in up_refresh_instances or up_refresh_dblists.
+### Examples:
 ```sql
+declare @json_input nvarchar(max)=N'{}'
+if object_id('tempdb..#tmp_result') is not null
+     drop table #tmp_result
+create table #tmp_result (run_id uniqueidentifier)
+set @the_sql=N'select name from sys.databases'
+set @json_input=JSON_MODIFY(@json_input,'$.servername_or_list','*')
+set @json_input=JSON_MODIFY(@json_input,'$.db_types','MSSQL')
+set @json_input=JSON_MODIFY(@json_input,'$.dbname_or_list','default')
+set @json_input=JSON_MODIFY(@json_input,'$.return_temp_table','#tmp_result')
+set @json_input=JSON_MODIFY(@json_input,'$.include_remote_info',1)
+
 EXEC [dbo].[up_call_sqlfunction]
     @The_SQL,
-    @json_input = '{}',
+    @json_input = @json_input,
     @json_return = '{}' OUTPUT,
     @error_msg = '' OUTPUT
-    
-1. **Call REST API**:
-   ```sql
-    declare @api_return nvarchar(max),@api_uri varchar(4000)
-	set @api_uri='https://data.nasdaq.com/api/v3/datatables/NDW/EQTA?date=2025-08-29&symbol=GOOGL-US&api_key=JwPfRGfkZRN48zKfDTvL'
-	exec [up_call_rest_api] @api_url=@api_uri,@content='',@api_return=@api_return output
-	select @api_return
-       
+--- access the result       
+select * from #tmp_result
+```
+
+# up_call_rest_api Stored Procedure
+
+## Overview
+The `up_call_rest_api` stored procedure is designed to facilitate HTTP requests to RESTful APIs from within a SQL Server environment. It allows users to send HTTP requests (e.g., GET, POST) to a specified API endpoint, customize headers, content, and other request parameters, and retrieve the API response. The procedure is implemented as an external CLR (Common Language Runtime) stored procedure, leveraging the `db_automation.StoredProcedures.call_rest_api` assembly.
+
+## Prerequisites
+- **SQL Server**: The database server must have CLR integration enabled, as this stored procedure relies on an external CLR assembly.
+- **Permissions**: The caller must have appropriate permissions to execute CLR stored procedures (`EXECUTE` permission on `up_call_rest_api`).
+- **Network Access**: The SQL Server instance must have network access to the target API endpoint specified in `@api_url`.
+- **CLR Assembly**: The `db_automation` assembly containing the `StoredProcedures.call_rest_api` class must be deployed in the SQL Server database.
+- **SQL Server Version**: Compatibility with the SQL Server version where CLR integration is supported (e.g., SQL Server 2012 or later).
+
+## Parameter Table
+| Parameter       | Type             | Description                                                                 | Default Value |
+|-----------------|------------------|-----------------------------------------------------------------------------|---------------|
+| `@api_url`      | `nvarchar(4000)` | The URL of the REST API endpoint to call.                                   | None          |
+| `@content`      | `nvarchar(max)`  | The request body content, typically used for POST or PUT requests.          | None          |
+| `@headers`      | `nvarchar(4000)` | Custom HTTP headers in a string format (e.g., `'Content-Type: application/json'`). | `N''`         |
+| `@method`       | `nvarchar(4000)` | The HTTP method for the request (e.g., `GET`, `POST`, `PUT`, `DELETE`).     | `N'GET'`      |
+| `@content_type` | `nvarchar(4000)` | The content type of the request body (e.g., `application/json`).            | `N''`         |
+| `@encode`       | `nvarchar(4000)` | The encoding type for the request content (if applicable).                  | `N''`         |
+| `@accept`       | `nvarchar(4000)` | The expected response content type (e.g., `application/json`).              | `N''`         |
+| `@useragent`    | `nvarchar(4000)` | The user-agent string for the HTTP request.                                 | `N''`         |
+| `@api_return`   | `nvarchar(max)`  | Output parameter that captures the response from the API call.              | None          |
+
+## Usage
+Call any REST API with standard parameters.
+### Examples:
+```sql
+declare @api_return nvarchar(max),@api_uri varchar(4000)
+set @api_uri='https://data.nasdaq.com/api/v3/datatables/NDW/EQTA?date=2025-08-29&symbol=GOOGL-US&api_key=JwPfRGfkZRN48zKfDTvL'
+exec [up_call_rest_api] @api_url=@api_uri,@content='',@api_return=@api_return output
+select @api_return
+```
