@@ -5,6 +5,7 @@ This project provides a centralized platform to build database applications runn
 ## Overview
 
 The platform simplifies the development of database applications for integrating and processing data across distributed infrastructures. It allows users to write SQL queries that execute on remote database servers, enabling complex database tasks across thousands of databases on hundreds of instances in multiple global regions in minutes.
+It is designed to execute SQL functions or queries as batches across multiple SQL Server, MySQL, or PostgreSQL database instances in a distributed environment. It supports flexible targeting of servers, databases, instance types, and environments, with options for dry runs, debugging, logging, and error handling. This platform also integrates REST API or CLI on AWS/Azure/GCP Cloud service and external systems (e.g., Jira and Salesforce) for devops tasks, logging task outcomes and supports JSON-based input and output for configuration and results. It provides a robust mechanism to execute SQL commands, manage parallelism, and track execution status. 
 
 ### Key Features
 
