@@ -117,7 +117,7 @@ This procedure is intended for long-running database tasks (e.g., schema migrati
 Please check the detail usage in up_refresh_instances or up_refresh_dblists.
 ### Examples:
 ```sql
-declare @json_input nvarchar(max)=N'{}'
+declare @json_input nvarchar(max)=N'{}',@json_return nvarchar(max)=N'{}', @the_sql nvarchar(max), @error_msg nvarchar(max)=N''
 if object_id('tempdb..#tmp_result') is not null
      drop table #tmp_result
 create table #tmp_result (run_id uniqueidentifier)
@@ -129,10 +129,10 @@ set @json_input=JSON_MODIFY(@json_input,'$.return_temp_table','#tmp_result')
 set @json_input=JSON_MODIFY(@json_input,'$.include_remote_info',1)
 
 EXEC [dbo].[up_call_sqlfunction]
-    @The_SQL,
+    @The_SQL=@the_sql,
     @json_input = @json_input,
-    @json_return = '{}' OUTPUT,
-    @error_msg = '' OUTPUT
+    @json_return =@json_return out,
+    @error_msg =@error_msg out
 --- access the result       
 select * from #tmp_result
 ```
