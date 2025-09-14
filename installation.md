@@ -9,7 +9,7 @@
 
 ## Installation Steps
 1. **Open `installation.sql`**:
-   - Use **SQL Server Management Studio (SSMS)** to connect to the SQL Server and open the `installation.sql` script.
+   - Use **SQL Server Management Studio (SSMS)** to connect to the SQL Server and open the [installation.sql](installation.sql) script. 
    - Perform the following replacements in `installation.sql`:
      
      a. Replace `$(my_database)` with your target database name.
