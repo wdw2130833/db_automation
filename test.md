@@ -8,7 +8,7 @@
   - [Core stored procedures](#Core-stored-procedures)
     - [up_call_sqlfunction](#up_call_sqlfunction)
     - [up_call_os_cmd](#up_call_os_cmd)
-    - [up_execute_ps](#up_execute_ps)
+    - [up_execute_powershell](#up_execute_powershell)
     - [up_execute_aws_cli](#up_execute_aws_cli)
     - [up_call_rest_api](#up_call_rest_api)
   - [Advanced Usage](#advanced-usage)
@@ -91,7 +91,7 @@ This procedure is intended for long-running database tasks (e.g., schema migrati
 | `servername_or_list` | `varchar(max)` | Comma-separated list of server names or `'*'` for all servers. | `''` |
 | `dbname_or_list` | `nvarchar(max)` | Comma-separated list of database names, `'*'` for all databases, or `'default'` for default databases (e.g., `master` for MSSQL, `postgres` for PostgreSQL). | `''` |
 | `return_type` | `nvarchar(100)` | Return format for results (`'json'` or empty for temp table). | `''` |
-| `return_temp_table` | `varchar(128)` | Name of the temporary table to store return results (e.g., `#tmp_default`). create this temp table before call up_call_sqlfunction: <br> if object_id(''tempdb..#tmp_result'') is not null <br> drop table #tmp_result <br> create table #tmp_result (run_id uniqueidentifier) | `''` |
+| `return_temp_table` | `varchar(128)` | Name of the temporary table to store return results (e.g., `#tmp_default`). create this temp table before call up_call_sqlfunction: <br> if object_id(''tempdb..#tmp_result'') is not null <br> drop table #tmp_result <br> create table #tmp_result (run_id uniqueidentifier) <br> | `''` |
 | `instance_types` | `varchar(4000)` | Comma-separated list of instance types or `'*'` for all. | `'*'` |
 | `db_types` | `varchar(4000)` | Comma-separated list of database types (`MSSQL`, `MySQL`, `PostgreSQL`) or `'*'` for all. | `'*'` |
 | `environment_or_list` | `nvarchar(max)` | Comma-separated list of environments or `'*'` for all. | `'*'` |
@@ -198,10 +198,10 @@ if @return<>0
 --- access the result       
 select * from #tmp_result
 ```
-# up_execute_ps 
+# up_execute_powershell 
 
 ## Overview
-The `up_execute_ps` stored procedure executes PowerShell scripts by invoking the `powershell.exe` command through the `[dbo].[up_call_os_cmd]` procedure. It handles script execution, error handling, and returns results in a JSON format or a temporary table.
+The `up_execute_powershell` stored procedure executes PowerShell scripts by invoking the `powershell.exe` command through the `[dbo].[up_call_os_cmd]` procedure. It handles script execution, error handling, and returns results in a JSON format or a temporary table.
 
 ## Parameters
 
@@ -234,7 +234,7 @@ if object_id('tempdb..#tmp_result') is not null
      drop table #tmp_result
 create table #tmp_result (run_id uniqueidentifier)
 
-EXEC @return = [dbo].[up_execute_ps]
+EXEC @return = [dbo].[up_execute_powershell]
     @ps_scripts = 'Write-Output "Hello, World!"',
     @error_msg = @error_msg OUTPUT,
     @ps_result = @ps_result OUTPUT;
