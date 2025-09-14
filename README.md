@@ -1,5 +1,15 @@
 # Database Automation Platform
 
+## Table of Contents
+
+- [Introduction](#introduction)
+- [Installation](#installation)
+- [Technical Documentation](#technical-documentation)
+- [Contributing](#contributing)
+- [License](#license)
+
+## Introduction
+
 This project provides a centralized platform to build database applications running on **Microsoft SQL Server**, focusing on automating data processes in a distributed infrastructure system. It enables seamless implementation of complex data flows and processes at the backend using **TSQL**, supporting **MSSQL**, **MySQL**, and **PostgreSQL**, with extensibility to other database systems.
 
 ## Overview
@@ -29,14 +39,18 @@ It is designed to execute SQL functions or queries as batches across multiple SQ
 - **PostgreSQL**
 - Extensible to other database systems with appropriate ODBC drivers.
 
-## Getting Started
+## Installation
 
-For detailed installation, setup instructions and usage examples, refer to the [installation guide](installation.md).
+For detailed installation and setup instructions, refer to the [installation guide](installation.md).
 
 ### Prerequisites
 - **Microsoft SQL Server 2016 or higher** with CLR enabled and .NET Framework 4.7.2 or higher.
 - **MySQL ODBC driver** for MySQL support.
 - **PostgreSQL ODBC driver** for PostgreSQL support.
+
+## Technical Documentation
+
+For detailed usages and examples, refer to the [Documentation guide](db_automation_documentation.md).
 
 ### Example Use Cases
 1. **Generate a Report**:
