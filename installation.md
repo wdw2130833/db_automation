@@ -137,6 +137,74 @@ EXEC [dbo].[up_call_sqlfunction]
 select * from #tmp_result
 ```
 
+## Overview
+The `up_call_os_cmd` stored procedure executes an operating system command on local host, with configurable options provided via a JSON input. It supports logging, debugging, dry runs, and error handling, with results optionally stored in a temporary table.
+
+## Parameters
+| Parameter | Type | Description | Default Value |
+|-----------|------|-------------|---------------|
+| `@cmd` | `nvarchar(4000)` | The command application to execute. This command must be searchable in path if not provide full path to the command. | `not empty` |
+| `@json_input` | `nvarchar(max)` | JSON string containing optional configuration settings (e.g., arguments, dry_run, debug, log, return_temp_table, raise_error). Must be valid JSON. | `'{}'` |
+| `@cmd_return` | `nvarchar(max)` | Output parameter returning the result of the executed command. | `'{}'` |
+| `@error_msg` | `nvarchar(max)` | Output parameter capturing any error messages generated during execution. | `''` |
+
+### JSON Input Fields (in `@json_input`)
+| Field | Type | Description | Default Value |
+|-------|------|-------------|---------------|
+| `arguments` | `nvarchar(max)` | Additional arguments for the command.| `''` |
+| `return_temp_table` | `varchar(max)` | Name of the temporary table to store results. Must exist in `tempdb` and be created before if specified. | `''` |
+| `dry_run` | `bit` | If `1`, simulates execution and returns configuration without running the command. | `0` |
+| `debug` | `bit` | If `1`, outputs detailed execution information from `#remote_exec_content`. | `0` |
+| `log` | `bit` | If `1`, logs execution details to `remote_sql_log` table. | `1` |
+| `raise_error` | `bit` | If `1`, raises an error on failure instead of returning it in `@error_msg`. | `0` |
+
+## Usage
+The procedure validates inputs, executes the command using `up_exec_remote_sql`, and handles results or errors based on configuration. It supports:
+- **Dry Run**: Preview execution details without running the command.
+- **Logging**: Stores execution details in `remote_sql_log`.
+- **Temporary Table Output**: Stores results in a specified temporary table.
+- **Error Handling**: Returns errors via `@error_msg` or raises them if `raise_error=1`.
+
+## Return Values
+- **0**: Success.
+- **-100**: Invalid JSON input or non-existent temporary table.
+- **-102**: Execution error (details in `@error_msg`).
+- **-110**: Empty `@cmd` parameter.
+
+## Error Handling
+- Validates `@cmd` for non-empty input.
+- Checks `@json_input` for valid JSON format.
+- Ensures specified temporary table exists (if provided).
+- Captures errors in `@error_msg` or raises them if `raise_error=1`.
+
+## Notes
+- The procedure uses a temporary table `#remote_exec_content` to store execution metadata.
+- The `up_exec_remote_sql` procedure is called internally to execute the command.
+- Sensitive data (e.g., passwords) is masked in `#remote_exec_content` before logging.
+- Ensure the `remote_sql_log` table exists if `@log=1`.
+
+### Examples:
+```sql
+declare @return int, @json_input nvarchar(max)=N'{}',@cmd_return nvarchar(max)=N'{}', @cmd nvarchar(max), @error_msg nvarchar(max)=N''
+if object_id('tempdb..#tmp_result') is not null
+     drop table #tmp_result
+create table #tmp_result (run_id uniqueidentifier)
+set @cmd=N'ipconfig '
+set @json_input=JSON_MODIFY(@json_input,'$.return_temp_table','#tmp_result')
+set @json_input=JSON_MODIFY(@json_input,'$.arguments','/all')
+set @json_input=JSON_MODIFY(@json_input,'$.debug',0)
+
+EXEC @return=[dbo].[up_call_os_cmd]
+    @cmd=@cmd,
+    @json_input = @json_input,
+    @cmd_return =@cmd_return out,
+    @error_msg =@error_msg out
+if @return<>0
+   select @return as return_error
+--- access the result       
+select * from #tmp_result
+```
+
 # up_call_rest_api Stored Procedure
 
 ## Overview
