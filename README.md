@@ -31,7 +31,7 @@ It is designed to execute SQL functions or queries as batches across multiple SQ
 
 ## Getting Started
 
-For detailed installation, setup instructions and usage examples, refer to the [installation guide](installation.md) (to be created separately for detailed steps, e.g., enabling CLR, configuring ODBC drivers, and running `installation.sql`).
+For detailed installation, setup instructions and usage examples, refer to the [installation guide](installation.md).
 
 ### Prerequisites
 - **Microsoft SQL Server 2016 or higher** with CLR enabled and .NET Framework 4.7.2 or higher.
