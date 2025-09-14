@@ -36,7 +36,7 @@ This procedure is intended for long-running database tasks (e.g., schema migrati
 | `@json_return` | `nvarchar(max) OUTPUT` | JSON output containing execution results, including status, server, database, affected rows, and errors. | `'{}'` |
 | `@error_msg` | `nvarchar(max) OUTPUT` | Error message if the procedure fails. | `''` |
 
-### Key parameters support in `@json_input` 
+### JSON Input Fields (in @json_input) 
 
 | Key name  | Type | Description | Default Value |
 |-----------|------|-------------|---------------|
