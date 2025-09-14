@@ -241,9 +241,12 @@ DECLARE @error_msg nvarchar(max) = '';
 DECLARE @ps_result nvarchar(max) = '{}';
 DECLARE @return int;
 
+if object_id('tempdb..#tmp_result') is not null
+     drop table #tmp_result
+create table #tmp_result (run_id uniqueidentifier)
+
 EXEC @return = [dbo].[up_execute_ps]
     @ps_scripts = 'Write-Output "Hello, World!"',
-    @return_temp_table = '#tmp_result',
     @error_msg = @error_msg OUTPUT,
     @ps_result = @ps_result OUTPUT;
 --- access the result       
