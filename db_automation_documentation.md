@@ -2,17 +2,14 @@
 
 ## Table of Contents
 
-- [Fundamentals](#fundamentals)
-  - [Core stored procedures](#Core-stored-procedures)
+- [Fundamental Core Stored Procedures](#fundamental-core-stored-procedures)
     - [up_call_sqlfunction](#up_call_sqlfunction)
     - [up_call_os_cmd](#up_call_os_cmd)
     - [up_execute_powershell](#up_execute_powershell)
     - [up_execute_aws_cli](#up_execute_aws_cli)
     - [up_call_rest_api](#up_call_rest_api)
-  - [Advanced Usage](#advanced-usage)
+      
 ## Fundamentals
-
-### Core stored procedures
 
 # up_call_sqlfunction
 
@@ -292,5 +289,3 @@ set @api_uri='https://data.nasdaq.com/api/v3/datatables/NDW/EQTA?date=2025-08-29
 exec [up_call_rest_api] @api_url=@api_uri,@content='',@api_return=@api_return output
 select @api_return
 ```
-### Advanced Usage
-   This is for test
