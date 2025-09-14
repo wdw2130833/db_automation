@@ -75,7 +75,7 @@ public partial class StoredProcedures
                 This_Execution.UserName = reader.GetString(reader.GetOrdinal("username"));
                 This_Execution.PWD = reader.GetString(reader.GetOrdinal("pwd"));
                 This_Execution.Remote_Output = reader.GetString(reader.GetOrdinal("Remote_Output"));
-                This_Execution.CMD_Type = reader.GetInt32(reader.GetOrdinal("CMD_Type"));
+                This_Execution.CMD_Type = reader.GetString(reader.GetOrdinal("CMD_Type"));
                 This_Execution.Arguments = reader.GetString(reader.GetOrdinal("Arguments"));
                 This_Execution.Connection_Options = reader.GetString(reader.GetOrdinal("Connection_Options"));
                 This_Execution.Resturn_TMP_Table = reader.GetString(reader.GetOrdinal("return_tmp_table"));
@@ -83,7 +83,7 @@ public partial class StoredProcedures
                 This_Execution.Status = "Waiting";
                 This_Execution.Remote_Error = "";
                 Exec_Lists.Add(This_Execution);
-                if (This_Execution.CMD_Type > 0)
+                if (This_Execution.CMD_Type !="")
                 {
                     This_Result = new Return_DT { Result_DT = new ConcurrentBag<DataTable>(), Executions = new List<Thread>() };
                     This_Result.Result_Name = "CMD";
@@ -1047,11 +1047,11 @@ internal partial class ExecuteCMD
         {
             sRemote_Execution.Remote_Error = "";
             sRemote_Execution.Remote_Output = "";
-            if (sRemote_Execution.CMD_Type == 1)
+            if (sRemote_Execution.CMD_Type == "SQL_CMD")
             {
                 if (sRemote_Execution.DBProvider == MSSQL)
                 {
-                    sCMD = "SQLCMD";
+                    sCMD = "SQLCMD.EXE";
                     sArguments = "-b -r1 -x -S" + sRemote_Execution.IP_or_DNS + "," + sRemote_Execution.Port + " -d" + sRemote_Execution.DBname;
                     sArguments = sArguments + " -t" + sRemote_Execution.TimeOut + " -i" + @sInput_File;
                     if (string.IsNullOrEmpty(sRemote_Execution.PWD))
@@ -1067,13 +1067,13 @@ internal partial class ExecuteCMD
                 }
                 if (sRemote_Execution.DBProvider == MySQL)
                 {
-                    sCMD = "mysql";
+                    sCMD = "MYSQL.EXE";
                     sArguments = "-B -h " + sRemote_Execution.IP_or_DNS + " -P " + sRemote_Execution.Port + " -D " + sRemote_Execution.DBname;
                     sArguments = sArguments + " -u " + sRemote_Execution.UserName + " -p" + sRemote_Execution.PWD;
                 }
                 if (sRemote_Execution.DBProvider == PGSQL)
                 {
-                    sCMD = "psql";
+                    sCMD = "PSQL.EXE";
                     sArguments = "-q -h " + sRemote_Execution.IP_or_DNS + " -p " + sRemote_Execution.Port + " -d " + sRemote_Execution.DBname;
                     sArguments = sArguments + " -U" + sRemote_Execution.UserName + " -w ";
 
@@ -1081,11 +1081,11 @@ internal partial class ExecuteCMD
                 sArguments = sArguments + " " + sRemote_Execution.Arguments;
                 WriteFile(sInput_File, sRemote_Execution.SQL);
             }
-            else if (sRemote_Execution.CMD_Type == 2)
+            else if (sRemote_Execution.CMD_Type == "SQL_DUMP")
             {
                 if (sRemote_Execution.DBProvider == MSSQL)
                 {
-                    sCMD = "bcp";
+                    sCMD = "BCP.EXE";
                     sArguments = " " + Format_SQL_Query(sRemote_Execution.SQL);
                     if (string.IsNullOrEmpty(sRemote_Execution.Arguments))
                     {
@@ -1116,7 +1116,7 @@ internal partial class ExecuteCMD
                 }
                 if (sRemote_Execution.DBProvider == MySQL)
                 {
-                    sCMD = "mysqldump";
+                    sCMD = "MYSQLDUMP.EXE";
                     sArguments = "-h " + sRemote_Execution.IP_or_DNS + " -P " + sRemote_Execution.Port + " -D " + sRemote_Execution.DBname;
                     sArguments = sArguments + " -u" + sRemote_Execution.UserName + " -p'" + sRemote_Execution.PWD + "'";
                     if (sRemote_Execution.Remote_Output != "")
@@ -1131,7 +1131,7 @@ internal partial class ExecuteCMD
                 }
                 if (sRemote_Execution.DBProvider == PGSQL)
                 {
-                    sCMD = "pg_dump";
+                    sCMD = "PG_DUMP.EXE";
                     sArguments = " -h " + sRemote_Execution.IP_or_DNS + " -p " + sRemote_Execution.Port + " -d " + sRemote_Execution.DBname;
                     sArguments = sArguments + " -U" + sRemote_Execution.UserName + " -w ";
                     sArguments = sArguments + " -f " + sInput_File;
@@ -1168,7 +1168,7 @@ internal partial class ExecuteCMD
                 process.StartInfo = processInfo;
                 process.Start();
 
-                if (sRemote_Execution.DBProvider != MSSQL && sRemote_Execution.CMD_Type != 3)
+                if (sRemote_Execution.DBProvider != MSSQL && sRemote_Execution.CMD_Type != "OS_CMD")
                 {
                     string sqlContent = File.ReadAllText(sInput_File);
                     process.StandardInput.Write(sqlContent);
@@ -1720,7 +1720,7 @@ internal partial class remote_execution
     private string vDriver;
     private string vPwd;
     private string vStatus;
-    private Int32 vCMD_Type;
+    private string vCMD_Type;
 
     private string vArguments;
     private string vIP_or_DNS;
@@ -1756,7 +1756,7 @@ internal partial class remote_execution
             vArguments = value;
         }
     }
-    public Int32 CMD_Type
+    public string CMD_Type
     {
         get
         {
