@@ -33,7 +33,7 @@ public partial class StoredProcedures
     const string failed = "failed";
     [Microsoft.SqlServer.Server.SqlProcedure]
     public static Int32 exec_remote_sql(SqlString Temp_Folder, out SqlString Return_Msg, Int32 max_threads, Boolean debug)
-    {        
+    {
         Return_Msg = success;
         string SQL = "";
         string Return_TMP_Table = "";
@@ -42,7 +42,7 @@ public partial class StoredProcedures
 
         SqlPipe pipe = SqlContext.Pipe;
         SqlConnection oConn = new SqlConnection();
-        SqlCommand oCmd = new SqlCommand();               
+        SqlCommand oCmd = new SqlCommand();
         oConn = new SqlConnection("context connection = true;");
         oConn.Open();
 
@@ -51,13 +51,13 @@ public partial class StoredProcedures
             " select * from #remote_exec_content order by return_tmp_table; ";
         oCmd.Connection = oConn;
         oCmd.CommandText = SQL;
-        if (debug) { pipe.ExecuteAndSend(oCmd); } 
+        if (debug) { pipe.ExecuteAndSend(oCmd); }
         //pickup remote sqls... 
         try
         {
             Return_DT This_Result;
             SqlDataReader reader = oCmd.ExecuteReader();
-            
+
             while (reader.Read())
             {
                 var This_Execution = new remote_execution();
@@ -77,15 +77,15 @@ public partial class StoredProcedures
                 This_Execution.Remote_Output = reader.GetString(reader.GetOrdinal("Remote_Output"));
                 This_Execution.CMD_Type = reader.GetInt32(reader.GetOrdinal("CMD_Type"));
                 This_Execution.Arguments = reader.GetString(reader.GetOrdinal("Arguments"));
-                This_Execution.Connection_Options = reader.GetString(reader.GetOrdinal("Connection_Options"));                
+                This_Execution.Connection_Options = reader.GetString(reader.GetOrdinal("Connection_Options"));
                 This_Execution.Resturn_TMP_Table = reader.GetString(reader.GetOrdinal("return_tmp_table"));
-                This_Execution.Debug= reader.GetBoolean(reader.GetOrdinal("Debug"));
+                This_Execution.Debug = reader.GetBoolean(reader.GetOrdinal("Debug"));
                 This_Execution.Status = "Waiting";
                 This_Execution.Remote_Error = "";
                 Exec_Lists.Add(This_Execution);
                 if (This_Execution.CMD_Type > 0)
                 {
-                    This_Result = new Return_DT {Result_DT = new ConcurrentBag<DataTable>(), Executions = new List<Thread>()};
+                    This_Result = new Return_DT { Result_DT = new ConcurrentBag<DataTable>(), Executions = new List<Thread>() };
                     This_Result.Result_Name = "CMD";
                     This_Result.Waitings = 0;
                     This_Result.Runnings = 0;
@@ -95,9 +95,9 @@ public partial class StoredProcedures
                 }
                 else if (Return_TMP_Table != This_Execution.Resturn_TMP_Table)
                 {
-                    This_Result = new Return_DT { Result_DT= new ConcurrentBag<DataTable>(),Executions= new List<Thread>()};
+                    This_Result = new Return_DT { Result_DT = new ConcurrentBag<DataTable>(), Executions = new List<Thread>() };
                     Return_TMP_Table = This_Execution.Resturn_TMP_Table;
-                    This_Result.Result_Name = Return_TMP_Table;                    
+                    This_Result.Result_Name = Return_TMP_Table;
                     This_Result.Waitings = 0;
                     This_Result.Runnings = 0;
                     This_Result.Stops = 0;
@@ -120,7 +120,7 @@ public partial class StoredProcedures
         }
         catch (Exception ex)
         {
-            Return_Msg = "Exception Error:" + ex.Message;            
+            Return_Msg = "Exception Error:" + ex.Message;
             pipe.Send(Return_Msg.ToString());
             return -300;
         }
@@ -136,9 +136,9 @@ public partial class StoredProcedures
                 foreach (remote_execution This_Execution in Exec_Lists)
                 {
                     if (This_Execution.Resturn_TMP_Table == This_Return.Result_Name || This_Return.Result_Name == "CMD")
-                        { This_Return.Waitings = This_Return.Waitings + 1; }
+                    { This_Return.Waitings = This_Return.Waitings + 1; }
                 }
-            }  
+            }
             while (Total_Waitings > 0)
             {
                 iCurrentThreads = 0;
@@ -148,7 +148,7 @@ public partial class StoredProcedures
                     {
                         foreach (remote_execution This_Execution in Exec_Lists)
                         {
-                            if (This_Return.Result_Name=="CMD" && This_Execution.Status == "Waiting" && This_Return.Runnings < This_Return.Threads)
+                            if (This_Return.Result_Name == "CMD" && This_Execution.Status == "Waiting" && This_Return.Runnings < This_Return.Threads)
                             {
                                 var executer_cmd = new ExecuteCMD(Temp_Folder.ToString(), This_Execution);
                                 Thread oItem = new System.Threading.Thread(executer_cmd.Process);
@@ -178,7 +178,7 @@ public partial class StoredProcedures
                                 oItem.Name = This_Execution.Run_ID.ToString();
                                 oItem.Start();
                                 This_Return.Executions.Add(oItem);
-                                if (This_Execution.Debug){pipe.Send("Sent query to " + This_Execution.Servername + "--" + This_Execution.DBname);}
+                                if (This_Execution.Debug) { pipe.Send("Sent query to " + This_Execution.Servername + "--" + This_Execution.DBname); }
                                 This_Execution.Status = "Running";
                                 Total_Waitings = Total_Waitings - 1;
                                 This_Return.Waitings = This_Return.Waitings - 1;
@@ -190,7 +190,7 @@ public partial class StoredProcedures
                                 }
                                 if (This_Return.Runnings >= This_Return.Threads)
                                 {
-                                    string msg = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")+ "---Started " + (This_Return.Runnings + This_Return.Stops).ToString() + " executions for " + This_Return.Result_Name + ", " + This_Return.Waitings.ToString() + " quries are waiting!" ;
+                                    string msg = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + "---Started " + (This_Return.Runnings + This_Return.Stops).ToString() + " executions for " + This_Return.Result_Name + ", " + This_Return.Waitings.ToString() + " quries are waiting!";
                                     pipe.Send(msg);
                                     Thread.Sleep(3000);
                                 }
@@ -203,7 +203,7 @@ public partial class StoredProcedures
             }
             if (Exec_Lists.Count > 1)
             {
-                string msg = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + "---Sent out "+ Exec_Lists.Count.ToString() + " queries to remote servers!";
+                string msg = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + "---Sent out " + Exec_Lists.Count.ToString() + " queries to remote servers!";
                 pipe.Send(msg);
                 Thread.Sleep(3000);
             }
@@ -224,10 +224,10 @@ public partial class StoredProcedures
             pipe.Send(DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + "---Start to return results.");
             pipe.Send(Environment.NewLine);
             DataTable All_DT = new DataTable();
-            
+
             foreach (Return_DT This_Return in Exec_Results)
-            {   
-                while (This_Return.Result_DT.Count >0)
+            {
+                while (This_Return.Result_DT.Count > 0)
                 {
                     DataTable TheReader;
                     if (This_Return.Result_DT.TryTake(out TheReader))
@@ -262,20 +262,20 @@ public partial class StoredProcedures
                         SqlContext.Pipe.Send(Return_Msg.ToString());
                         return -5;
                     }
-                }                
+                }
             }
-            if (All_DT.Rows.Count > 0) {Return_Msg =SendDataTable(All_DT);}
+            if (All_DT.Rows.Count > 0) { Return_Msg = SendDataTable(All_DT); }
             Return_Msg = Update_Exec_Content(Exec_Lists, oConn);
             pipe.Send(DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + " : Returned all results");
-            pipe.Send(DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + " : "+ Return_Msg.ToString());
+            pipe.Send(DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + " : " + Return_Msg.ToString());
             oCmd.Dispose();
             oConn.Close();
             oConn.Dispose();
-            if (Return_Msg.ToString() != success) 
+            if (Return_Msg.ToString() != success)
             {
-                return -1; 
+                return -1;
             }
-            Return_Msg=success;
+            Return_Msg = success;
             return 0;
         }
         catch (SqlException sqlex)
@@ -326,8 +326,9 @@ public partial class StoredProcedures
                 SqlContext.Pipe.Send(thedata.ToString());
                 return thedata;
             }
-             
-            if (!File.Exists(@filename)) {
+
+            if (!File.Exists(@filename))
+            {
                 thedata = "Error: file not exists.";
                 SqlContext.Pipe.Send(thedata.ToString());
                 return thedata;
@@ -359,9 +360,9 @@ public partial class StoredProcedures
     {
 
         api_return = "";
-        string jsonPayload= content.ToString();
+        string jsonPayload = content.ToString();
         try
-        {   
+        {
             ServicePointManager.CertificatePolicy = new CustomCertificatePolicy();
             System.Net.ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
             System.Net.ServicePointManager.Expect100Continue = true;
@@ -379,12 +380,12 @@ public partial class StoredProcedures
             if (!string.IsNullOrEmpty(accept))
             {
                 request.Accept = accept;
-            }            
+            }
             request.Timeout = 30000;
             if (!string.IsNullOrEmpty(headers))
             {
                 string[] the_headers = headers.Split(';');
-                
+
                 for (int i = 0; i < the_headers.Length; i++)
                 {
                     string[] thisHeader = the_headers[i].Split('=');
@@ -403,7 +404,7 @@ public partial class StoredProcedures
 
             HttpWebResponse postResponse = (HttpWebResponse)request.GetResponse();
             StreamReader postReqReader;
-            
+
             if (!string.IsNullOrEmpty(encode))
             {
                 postReqReader = new StreamReader(postResponse.GetResponseStream(), Encoding.GetEncoding(encode));
@@ -418,9 +419,9 @@ public partial class StoredProcedures
                 api_return = $"HTTP Error: {postResponse.StatusCode}, Details: {postReqReader.ReadToEnd()}";
                 return -50;
             }
-            api_return = api_return+ postReqReader.ReadToEnd();
-            
-                        
+            api_return = api_return + postReqReader.ReadToEnd();
+
+
             return 0;
         }
         catch (WebException ex)
@@ -430,26 +431,26 @@ public partial class StoredProcedures
                 using (Stream stream = errorResponse.GetResponseStream())
                 using (StreamReader reader = new StreamReader(stream))
                 {
-                    api_return=$"HTTP Error: {errorResponse.StatusCode}, Details: {reader.ReadToEnd()}";
+                    api_return = $"HTTP Error: {errorResponse.StatusCode}, Details: {reader.ReadToEnd()}";
                 }
             }
             else
             {
                 api_return = ex.Message;
             }
-            
+
             return -100;
         }
         catch (Exception ex)
         {
-            api_return=ex.Message;
+            api_return = ex.Message;
             return -200;
         }
     }
 
     [Microsoft.SqlServer.Server.SqlProcedure]
     public static Int32 up_readfile(string filename, out SqlString thedata)
-    {                
+    {
         try
         {
             if (string.IsNullOrEmpty(filename))
@@ -590,14 +591,14 @@ public partial class StoredProcedures
             try
             {
                 string sql = "update [#remote_exec_content] set remote_output=@remote_output,remote_error=@remote_error,affected_rows=@affected_rows where run_id=@run_id";
-                
+
                 foreach (remote_execution This_execution in result_contents)
                 {
                     if (This_execution.Remote_Error != success)
                     {
-                        SqlContext.Pipe.Send(This_execution.Servername+"."+ This_execution.DBname+" -- failed: "+ This_execution.Remote_Error);
+                        SqlContext.Pipe.Send(This_execution.Servername + "." + This_execution.DBname + " -- failed: " + This_execution.Remote_Error);
                         SqlContext.Pipe.Send(Environment.NewLine);
-                        return_msg = failed; 
+                        return_msg = failed;
                     }
                     using (SqlCommand command = new SqlCommand(sql, oConn, transaction))
                     {
@@ -633,53 +634,53 @@ public partial class StoredProcedures
     {
         string sql = "";
         string the_length = "";
-        bool[] coerceToString = null; 
-        List<string> data_type_no_lenth = new List<string>{ "Int", "BigInt", "Bit", "DateTime", "Money", "SmallInt", "TinyInt", "UniqueIdentifier", "Ntext", "Real", "sql_variant", "DateTime", "Variant" };
+        bool[] coerceToString = null;
+        List<string> data_type_no_lenth = new List<string> { "Int", "BigInt", "Bit", "DateTime", "Money", "SmallInt", "TinyInt", "UniqueIdentifier", "Ntext", "Real", "sql_variant", "DateTime", "Variant" };
         try
         {
             SqlMetaData[] metaData = ExtractDataTableColumnMetaData(dt, ref coerceToString);
             foreach (SqlMetaData column in metaData)
             {
-                    sql = sql+ "IF COL_LENGTH('TEMPDB.." + tmptable_name + "', '"+column.Name+"') IS NULL " +
-                            " ALTER TABLE [" + tmptable_name + "] add ";
-                    if (data_type_no_lenth.Contains(column.SqlDbType.ToString()))
+                sql = sql + "IF COL_LENGTH('TEMPDB.." + tmptable_name + "', '" + column.Name + "') IS NULL " +
+                        " ALTER TABLE [" + tmptable_name + "] add ";
+                if (data_type_no_lenth.Contains(column.SqlDbType.ToString()))
+                {
+                    if (column.SqlDbType.ToString() == "Variant")
                     {
-                        if (column.SqlDbType.ToString() == "Variant")
-                        {
-                            sql = sql + "[" + column.Name + "] sql_Variant;";
-                        }
-                        else
-                        {
-                            sql = sql + "[" + column.Name + "] " + column.SqlDbType.ToString() + ";";
-                        }
+                        sql = sql + "[" + column.Name + "] sql_Variant;";
                     }
                     else
                     {
-                        the_length = " (" + column.MaxLength.ToString().Replace("-1", "MAX") + ");";
-                        if (column.SqlDbType.ToString() == "Decimal")
-                        { the_length = " (" + column.Precision.ToString() + "," + column.Scale.ToString() + ");"; }
-                        sql = sql + "[" + column.Name + "] " + column.SqlDbType.ToString() + the_length;
-                    }   
-            }            
+                        sql = sql + "[" + column.Name + "] " + column.SqlDbType.ToString() + ";";
+                    }
+                }
+                else
+                {
+                    the_length = " (" + column.MaxLength.ToString().Replace("-1", "MAX") + ");";
+                    if (column.SqlDbType.ToString() == "Decimal")
+                    { the_length = " (" + column.Precision.ToString() + "," + column.Scale.ToString() + ");"; }
+                    sql = sql + "[" + column.Name + "] " + column.SqlDbType.ToString() + the_length;
+                }
+            }
             //SqlContext.Pipe.Send(sql);
             using (SqlCommand command = new SqlCommand(sql, oConn))
             { command.ExecuteNonQuery(); }
             return success;
-        }        
-        catch (Exception ex) 
+        }
+        catch (Exception ex)
         {
             string error_msg = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + "---Alter_Temp_Table Error:" + ex.Message;
             SqlContext.Pipe.Send(error_msg);
             return error_msg;
         }
-        
+
     }
-    private static string LoadDataTable(string tmptable_name,DataTable dt, SqlConnection oConn)
+    private static string LoadDataTable(string tmptable_name, DataTable dt, SqlConnection oConn)
     {
         List<string> columnlist = new List<string>();
         string sql = "select name from tempdb.sys.columns where object_id=object_id('tempdb.." + tmptable_name + "') order by column_id";
-        
-        SqlCommand cmd=new SqlCommand(sql, oConn);
+
+        SqlCommand cmd = new SqlCommand(sql, oConn);
         SqlDataReader reader = cmd.ExecuteReader();
         while (reader.Read())
         {
@@ -713,7 +714,7 @@ public partial class StoredProcedures
             catch (Exception ex)
             {
                 transaction.Rollback();
-                string error_msg = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + "---insert "+ tmptable_name+" Error:" + ex.Message;
+                string error_msg = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + "---insert " + tmptable_name + " Error:" + ex.Message;
                 SqlContext.Pipe.Send(error_msg);
                 SqlContext.Pipe.Send(sql);
                 return error_msg;
@@ -976,7 +977,7 @@ public partial class StoredProcedures
     }
     private static int RunningThreads(List<Return_DT> All_Result)
     {
-        
+
         int iRunningCount = 0;
         int iStoppedCount = 0;
         int Total_Running = 0;
@@ -1019,7 +1020,7 @@ public partial class StoredProcedures
         This_Result.Runnings = iRunningCount;
         This_Result.Stops = iStoppedCount;
     }
-    
+
 }
 internal partial class ExecuteCMD
 {
@@ -1039,7 +1040,7 @@ internal partial class ExecuteCMD
     {
         string sCMD = "";
         string sArguments = "";
-        string sInput_File = sTemp_Folder + "sql_cmd_" + DateTime.Now.ToString("yyyy_MM_dd") + "_" + sRemote_Execution.Run_ID.ToString().Replace("-","") + ".sql";
+        string sInput_File = sTemp_Folder + "sql_cmd_" + DateTime.Now.ToString("yyyy_MM_dd") + "_" + sRemote_Execution.Run_ID.ToString().Replace("-", "") + ".sql";
         string sError_File = sTemp_Folder + "sql_cmd_" + DateTime.Now.ToString("yyyy_MM_dd") + "_" + sRemote_Execution.Run_ID.ToString().Replace("-", "") + ".log";
         string sOutput_File = sTemp_Folder + "sql_cmd_" + DateTime.Now.ToString("yyyy_MM_dd") + "_" + sRemote_Execution.Run_ID.ToString().Replace("-", "") + ".out";
         try
@@ -1048,34 +1049,34 @@ internal partial class ExecuteCMD
             sRemote_Execution.Remote_Output = "";
             if (sRemote_Execution.CMD_Type == 1)
             {
-                if (sRemote_Execution.DBProvider==MSSQL)
+                if (sRemote_Execution.DBProvider == MSSQL)
                 {
                     sCMD = "SQLCMD";
-                    sArguments = "-b -r1 -x -S" + sRemote_Execution.IP_or_DNS+","+ sRemote_Execution.Port+" -d"+ sRemote_Execution.DBname;
-                    sArguments = sArguments + " -t"+ sRemote_Execution.TimeOut+" -i"+ @sInput_File ;
+                    sArguments = "-b -r1 -x -S" + sRemote_Execution.IP_or_DNS + "," + sRemote_Execution.Port + " -d" + sRemote_Execution.DBname;
+                    sArguments = sArguments + " -t" + sRemote_Execution.TimeOut + " -i" + @sInput_File;
                     if (string.IsNullOrEmpty(sRemote_Execution.PWD))
                     {
                         sArguments = sArguments + " -E";
                     }
                     else
                     {
-                        sArguments = sArguments + " -U" + sRemote_Execution.UserName+" -P\"" + sRemote_Execution.PWD+"\"";
+                        sArguments = sArguments + " -U" + sRemote_Execution.UserName + " -P\"" + sRemote_Execution.PWD + "\"";
                     }
-                    
-                    
+
+
                 }
                 if (sRemote_Execution.DBProvider == MySQL)
                 {
                     sCMD = "mysql";
                     sArguments = "-B -h " + sRemote_Execution.IP_or_DNS + " -P " + sRemote_Execution.Port + " -D " + sRemote_Execution.DBname;
-                    sArguments = sArguments + " -u " + sRemote_Execution.UserName + " -p" + sRemote_Execution.PWD;                    
+                    sArguments = sArguments + " -u " + sRemote_Execution.UserName + " -p" + sRemote_Execution.PWD;
                 }
                 if (sRemote_Execution.DBProvider == PGSQL)
                 {
                     sCMD = "psql";
                     sArguments = "-q -h " + sRemote_Execution.IP_or_DNS + " -p " + sRemote_Execution.Port + " -d " + sRemote_Execution.DBname;
-                    sArguments = sArguments + " -U" + sRemote_Execution.UserName + " -w " ;
-                    
+                    sArguments = sArguments + " -U" + sRemote_Execution.UserName + " -w ";
+
                 }
                 sArguments = sArguments + " " + sRemote_Execution.Arguments;
                 WriteFile(sInput_File, sRemote_Execution.SQL);
@@ -1097,7 +1098,8 @@ internal partial class ExecuteCMD
                             sArguments = sArguments + " queryout " + sOutput_File + " -c ";
                         }
                     }
-                    else {
+                    else
+                    {
                         sArguments = sArguments + sRemote_Execution.Arguments;
                     }
                     sArguments = sArguments + " -S " + sRemote_Execution.IP_or_DNS + "," + sRemote_Execution.Port + " -d " + sRemote_Execution.DBname + " -e " + sError_File;
@@ -1109,14 +1111,14 @@ internal partial class ExecuteCMD
                     {
                         sArguments = sArguments + " -U " + sRemote_Execution.UserName + " -P'" + sRemote_Execution.PWD + "'";
                     }
-                    
+
 
                 }
                 if (sRemote_Execution.DBProvider == MySQL)
                 {
                     sCMD = "mysqldump";
                     sArguments = "-h " + sRemote_Execution.IP_or_DNS + " -P " + sRemote_Execution.Port + " -D " + sRemote_Execution.DBname;
-                    sArguments = sArguments + " -u" + sRemote_Execution.UserName + " -p'" + sRemote_Execution.PWD+"'";
+                    sArguments = sArguments + " -u" + sRemote_Execution.UserName + " -p'" + sRemote_Execution.PWD + "'";
                     if (sRemote_Execution.Remote_Output != "")
                     {
                         sArguments = sArguments + " --result-file= " + sRemote_Execution.Remote_Output;
@@ -1146,8 +1148,10 @@ internal partial class ExecuteCMD
             }
             else
             {
-                sCMD= sRemote_Execution.Arguments;
+                sCMD = sRemote_Execution.SQL;
+                sArguments = sRemote_Execution.Arguments;
             }
+
             ProcessStartInfo processInfo = new ProcessStartInfo
             {
                 FileName = sCMD,
@@ -1164,13 +1168,13 @@ internal partial class ExecuteCMD
                 process.StartInfo = processInfo;
                 process.Start();
 
-                if (sRemote_Execution.DBProvider != MSSQL)
+                if (sRemote_Execution.DBProvider != MSSQL && sRemote_Execution.CMD_Type != 3)
                 {
                     string sqlContent = File.ReadAllText(sInput_File);
                     process.StandardInput.Write(sqlContent);
                     process.StandardInput.Close();
                 }
-                
+
                 string output = process.StandardOutput.ReadToEnd();
                 string error = process.StandardError.ReadToEnd();
                 process.WaitForExit();
@@ -1209,7 +1213,7 @@ internal partial class ExecuteCMD
                 {
                     File.Delete(@sInput_File);
                 }
-                
+
             }
         }
         catch (Exception ex)
@@ -1273,7 +1277,7 @@ internal partial class ExecuteCMD
         return $"\"{arg.Replace("\"", "\\\"")}\"";
     }
 }
-    internal partial class ExecuteSQL
+internal partial class ExecuteSQL
 {
     const string MSSQL = "MSSQL";
     const string MySQL = "MySQL";
@@ -1303,7 +1307,7 @@ internal partial class ExecuteCMD
 
     public void Process()
     {
-        
+
         sExecuteTSQL = sRemote_Execution.SQL;
         sRemote_Execution.AffectedRows = 0;
         sRemote_Execution.Remote_Error = "";
@@ -1312,25 +1316,25 @@ internal partial class ExecuteCMD
         DataTable dt = new DataTable();
         if (sExecuteDB_DBProvider == PGSQL)
         {
-            
+
             string connectionString = "Driver={" + sRemote_Execution.Driver + "};" +
                                      "Server=" + sRemote_Execution.IP_or_DNS + ";" +
                                      "Database=" + sExecuteDB + ";" +
                                      "Uid=" + sRemote_Execution.UserName + ";" +
                                      "Port=" + sRemote_Execution.Port.ToString() + ";" +
                                      "Pwd=" + sRemote_Execution.PWD + ";" + sRemote_Execution.Connection_Options;
-            
+
             using (OdbcConnection oConn = new OdbcConnection(connectionString))
             {
                 try
                 {
                     oConn.Open();
-                    
+
                     using (OdbcCommand oCmd = new OdbcCommand(sExecuteTSQL, oConn))
                     {
                         oCmd.CommandTimeout = Thetimeout;
                         OdbcDataReader reader = oCmd.ExecuteReader();
-                                                
+
                         while (!reader.IsClosed)
                         {
                             DataTable tmp_dt = new DataTable();
@@ -1347,7 +1351,7 @@ internal partial class ExecuteCMD
                                 else
                                 {
                                     dt.Merge(tmp_dt, true);
-                                    sRemote_Execution.AffectedRows= sRemote_Execution.AffectedRows+tmp_dt.Rows.Count;
+                                    sRemote_Execution.AffectedRows = sRemote_Execution.AffectedRows + tmp_dt.Rows.Count;
                                 }
                             }
                             else
@@ -1370,7 +1374,7 @@ internal partial class ExecuteCMD
                                          "Source: " + e.Errors[i].Source + "\n" +
                                          "SQL: " + e.Errors[i].SQLState + "\n";
                     }
-                    
+
                     sRemote_Execution.Remote_Error = sRemote_Execution.Remote_Error + Errmsg + Environment.NewLine;
                 }
                 catch (Exception ex)
@@ -1380,7 +1384,7 @@ internal partial class ExecuteCMD
                 }
                 finally
                 {
-                    if (dt.Columns.Count > 0) { Add_Run_ID(dt); dReaders.Add(dt);}
+                    if (dt.Columns.Count > 0) { Add_Run_ID(dt); dReaders.Add(dt); }
                     oConn.Close();
                     oConn.Dispose();
                 }
@@ -1389,26 +1393,26 @@ internal partial class ExecuteCMD
         }
         if (sExecuteDB_DBProvider == MySQL)
         {
-            
+
             string connectionString = "Driver={" + sRemote_Execution.Driver + "};" +
                                      "Server=" + sRemote_Execution.IP_or_DNS + ";" +
                                      "Database=" + sExecuteDB + ";" +
                                      "Uid=" + sRemote_Execution.UserName + ";" +
                                      "Port=" + sRemote_Execution.Port.ToString() + ";" +
-                                     "Pwd={" + (sRemote_Execution.PWD).Replace("{","{{") + "};" + sRemote_Execution.Connection_Options;
+                                     "Pwd={" + (sRemote_Execution.PWD).Replace("{", "{{") + "};" + sRemote_Execution.Connection_Options;
 
-            
+
             using (OdbcConnection oConn = new OdbcConnection(connectionString))
-            {    
+            {
                 try
                 {
                     oConn.Open();
-                    
+
                     using (OdbcCommand oCmd = new OdbcCommand(sExecuteTSQL, oConn))
                     {
                         oCmd.CommandTimeout = Thetimeout;
                         OdbcDataReader reader = oCmd.ExecuteReader();
-                                                
+
                         while (!reader.IsClosed)
                         {
                             DataTable tmp_dt = new DataTable();
@@ -1419,7 +1423,7 @@ internal partial class ExecuteCMD
                                 {
                                     foreach (DataRow dr in tmp_dt.Rows)
                                     {
-                                        sRemote_Execution.Remote_Error = sRemote_Execution.Remote_Error + dr["remote_error"] ?? "Null"+ Environment.NewLine;
+                                        sRemote_Execution.Remote_Error = sRemote_Execution.Remote_Error + dr["remote_error"] ?? "Null" + Environment.NewLine;
                                     }
                                 }
                                 else
@@ -1434,7 +1438,7 @@ internal partial class ExecuteCMD
                                 sRemote_Execution.Remote_Error = sRemote_Execution.Remote_Error + Errmsg + Environment.NewLine;
                             }
                         }
-                        
+
                     }
                 }
                 catch (OdbcException e)
@@ -1475,7 +1479,7 @@ internal partial class ExecuteCMD
                     var oConn = new SqlConnection();
                     if (string.IsNullOrEmpty(sRemote_Execution.PWD))
                     {
-                        oConn = new SqlConnection("Data Source=" + sRemote_Execution.IP_or_DNS + ","+ sRemote_Execution.Port+ ";Initial Catalog=" + sRemote_Execution.DBname + ";Integrated Security=SSPI;Network Library=DBMSSOCN;" + sRemote_Execution.Connection_Options);
+                        oConn = new SqlConnection("Data Source=" + sRemote_Execution.IP_or_DNS + "," + sRemote_Execution.Port + ";Initial Catalog=" + sRemote_Execution.DBname + ";Integrated Security=SSPI;Network Library=DBMSSOCN;" + sRemote_Execution.Connection_Options);
                     }
                     else
                     {
@@ -1518,8 +1522,8 @@ internal partial class ExecuteCMD
                             }
                             else
                             {
-                                string Errmsg = "tmp_dt load null-" ;
-                                sRemote_Execution.Remote_Error =  Errmsg + Environment.NewLine;
+                                string Errmsg = "tmp_dt load null-";
+                                sRemote_Execution.Remote_Error = Errmsg + Environment.NewLine;
                             }
                         }
                         if (checkreturn)
@@ -1529,7 +1533,7 @@ internal partial class ExecuteCMD
                                 if ((string)returnValueParam.Value != "0")
                                 {
                                     string Errmsg = "Return_value is " + (string)returnValueParam.Value;
-                                    sRemote_Execution.Remote_Error =  Errmsg + Environment.NewLine;
+                                    sRemote_Execution.Remote_Error = Errmsg + Environment.NewLine;
                                 }
                             }
                         }
@@ -1560,7 +1564,7 @@ internal partial class ExecuteCMD
                         string Errmsg = "Exception-" + ex.Message;
                         sRemote_Execution.Remote_Error = Errmsg + Environment.NewLine;
                     }
-                    finally 
+                    finally
                     {
                         if (dt.Columns.Count > 0) { Add_Run_ID(dt); dReaders.Add(dt); }
                         oConn.Close();
@@ -1579,7 +1583,7 @@ internal partial class ExecuteCMD
                 sRemote_Execution.Remote_Error = sRemote_Execution.Remote_Error + Errmsg + Environment.NewLine;
 
             }
-            catch (Exception ex) 
+            catch (Exception ex)
             {
                 string Errmsg = "Exception:" + ex.Message;
                 sRemote_Execution.Remote_Error = sRemote_Execution.Remote_Error + Errmsg + Environment.NewLine;
@@ -1601,7 +1605,7 @@ internal partial class ExecuteCMD
             this_dt.Columns.Add(column);
             column.SetOrdinal(0);
         }
-    }    
+    }
 }
 internal class Return_DT
 {
@@ -1676,7 +1680,7 @@ internal class Return_DT
             vThreads = value;
         }
     }
-        
+
     public ConcurrentBag<DataTable> Result_DT
     {
         get
@@ -1717,7 +1721,7 @@ internal partial class remote_execution
     private string vPwd;
     private string vStatus;
     private Int32 vCMD_Type;
-    
+
     private string vArguments;
     private string vIP_or_DNS;
     private string vConnection_Options;
