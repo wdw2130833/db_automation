@@ -7,6 +7,10 @@
 - [Usage](#usage)
   - [Core stored procedures](#Core-stored-procedures)
     - [up_call_sqlfunction](#up_call_sqlfunction)
+    - [up_call_os_cmd](#up_call_os_cmd)
+    - [up_execute_ps](#up_execute_ps)
+    - [up_execute_aws_cli](#up_execute_aws_cli)
+    - [up_call_rest_api](#up_call_rest_api)
   - [Advanced Usage](#advanced-usage)
 - [Contributing](#contributing)
 - [License](#license)
@@ -42,7 +46,6 @@ It is designed to execute SQL functions or queries as batches across multiple SQ
 - **PostgreSQL**
 - Extensible to other database systems with appropriate ODBC drivers.
 
-
 ## Installation
 
 For detailed installation and setup instructions, refer to the [installation guide](installation.md).
@@ -53,8 +56,6 @@ For detailed installation and setup instructions, refer to the [installation gui
 - **PostgreSQL ODBC driver** for PostgreSQL support.
 
 ## Usage
-
-
 
 ### Core stored procedures
 
@@ -197,6 +198,144 @@ if @return<>0
 --- access the result       
 select * from #tmp_result
 ```
+# up_execute_ps 
+
+## Overview
+The `up_execute_ps` stored procedure executes PowerShell scripts by invoking the `powershell.exe` command through the `[dbo].[up_call_os_cmd]` procedure. It handles script execution, error handling, and returns results in a JSON format or a temporary table.
+
+## Parameters
+
+| Parameter           | Type          | Description                                                                 | Default Value       |
+|---------------------|---------------|-----------------------------------------------------------------------------|---------------------|
+| `@ps_scripts`       | `nvarchar(max)` | The PowerShell script to execute. Must not be null or empty.                | None                |
+| `@return_temp_table`| `varchar(128)`  | Name of the temporary table to store results (if applicable).               | `#tmp_result`       |
+| `@error_msg`        | `nvarchar(max)` | Output parameter capturing any error messages during execution.             | empty string |
+| `@ps_result`        | `nvarchar(max)` | Output parameter containing the result of the PowerShell execution in JSON. | empty JSON |
+
+## Return Value
+- Returns an integer (`@return`) from the `[dbo].[up_call_os_cmd]` procedure, indicating the success or failure of the command execution.
+- Returns `-100` if `@ps_scripts` is null or empty, with an error message set in `@error_msg`.
+
+## Description
+1. **Input Validation**: Checks if `@ps_scripts` is null or empty. If so, sets `@error_msg` to `'@ps_scripts is null or empty!'` and returns `-100`.
+2. **Script Preparation**: Wraps the provided `@ps_scripts` in a PowerShell `try-catch` block to handle exceptions. Escapes double quotes in the script for proper execution.
+3. **Command Construction**: Builds the `powershell.exe` command with the prepared script as an argument.
+4. **JSON Input**: Constructs a JSON object containing the `@return_temp_table` and `@arguments` for passing to `up_call_os_cmd`.
+5. **Execution**: Calls `[dbo].[up_call_os_cmd]` to execute the PowerShell command, capturing the result in `@ps_result` and any errors in `@error_msg`.
+6. **Output**: Returns the result code from `up_call_os_cmd`.
+
+## Example
+```sql
+DECLARE @error_msg nvarchar(max) = '';
+DECLARE @ps_result nvarchar(max) = '{}';
+DECLARE @return int;
+
+if object_id('tempdb..#tmp_result') is not null
+     drop table #tmp_result
+create table #tmp_result (run_id uniqueidentifier)
+
+EXEC @return = [dbo].[up_execute_ps]
+    @ps_scripts = 'Write-Output "Hello, World!"',
+    @error_msg = @error_msg OUTPUT,
+    @ps_result = @ps_result OUTPUT;
+--- access the result       
+select * from #tmp_result
+```
+
+## Notes
+- The procedure assumes `up_call_os_cmd` is available and correctly configured to execute OS commands.
+- The `@ps_scripts` parameter must contain valid PowerShell script content.
+- The procedure escapes double quotes in the script to ensure proper execution.
+- Errors from PowerShell execution are captured in the `@error_msg` output parameter.
+- The `@ps_result` output is in JSON format, as determined by `up_call_os_cmd`.
+
+# up_execute_aws_cli 
+
+The `up_execute_aws_cli` stored procedure executes AWS CLI commands from within SQL Server, allowing interaction with AWS services. It constructs the command, processes parameters, and calls the underlying `[dbo].[up_call_os_cmd]` procedure to execute the command and handle results.
+
+## Parameters
+
+| Parameter          | Type          | Description                                                                 | Default Value        |
+|--------------------|---------------|-----------------------------------------------------------------------------|----------------------|
+| `@aws_cmd`         | `nvarchar(max)` | The AWS CLI command to execute (e.g., `'s3 ls'`). Required.                  | None                 |
+| `@profile`         | `varchar(400)`  | AWS CLI profile name. If starts with '@', it resolves using `[dbo].[fn_get_para_value]`. | empty string |
+| `@region`          | `varchar(50)`   | AWS region for the command (e.g., `'us-east-1'`).                           | empty string  |
+| `@return_temp_table` | `varchar(128)` | Name of the temporary table to store results.                                | '#tmp_result'      |
+| `@error_msg`       | `nvarchar(max)` | Output parameter for error messages.                                        | empty string  |
+| `@aws_result`      | `nvarchar(max)` | Output parameter for the JSON result of the AWS CLI command.                | empty JSON  |
+
+## Return Value
+
+- Returns an integer from the `up_call_os_cmd` procedure, indicating success (0) or failure (non-zero).
+- If `@aws_cmd` is null or empty, returns `-100` and sets `@error_msg` to `'@aws_cmd is null or empty!'`.
+
+## Description
+
+This stored procedure facilitates executing AWS CLI commands by:
+1. Validating the `@aws_cmd` parameter to ensure it is not null or empty.
+2. Resolving the `@profile` parameter if it starts with '@' by calling `[dbo].[fn_get_para_value]`.
+3. Appending `--profile` and `--region` to the command if provided.
+4. Constructing a JSON input for `[dbo].[up_call_os_cmd]` with the temporary table name and command arguments.
+5. Executing the command via `[dbo].[up_call_os_cmd]` and returning its results and error messages.
+
+## Example
+
+```sql
+DECLARE @error_msg nvarchar(max)
+DECLARE @aws_result nvarchar(max)
+if object_id('tempdb..#tmp_aws_output') is not null
+     drop table #tmp_aws_output
+create table #tmp_aws_output (run_id uniqueidentifier)
+
+EXEC @return = [dbo].[up_execute_aws_cli]
+    @aws_cmd = 's3 ls',
+    @profile = 'my-profile',
+    @region = 'us-west-2',
+    @return_temp_table = '#tmp_aws_output',
+    @error_msg = @error_msg OUTPUT,
+    @aws_result = @aws_result OUTPUT
+select * from #tmp_aws_output
+```
+
+## Notes
+
+- Ensure `aws.exe` is accessible on the SQL Server machine and properly configured.
+- The `@profile` parameter supports dynamic resolution using `[dbo].[fn_get_para_value]` if prefixed with '@'.
+- The procedure relies on `[dbo].[up_call_os_cmd]` for command execution, which must be configured correctly.
+- Results are stored in the specified `@return_temp_table` and returned as JSON in `@aws_result`.
+# up_call_rest_api
+
+## Overview
+The `up_call_rest_api` stored procedure is designed to facilitate HTTP requests to RESTful APIs from within a SQL Server environment. It allows users to send HTTP requests (e.g., GET, POST) to a specified API endpoint, customize headers, content, and other request parameters, and retrieve the API response. The procedure is implemented as an external CLR (Common Language Runtime) stored procedure, leveraging the `db_automation.StoredProcedures.call_rest_api` assembly.
+
+## Prerequisites
+- **SQL Server**: The database server must have CLR integration enabled, as this stored procedure relies on an external CLR assembly.
+- **Permissions**: The caller must have appropriate permissions to execute CLR stored procedures (`EXECUTE` permission on `up_call_rest_api`).
+- **Network Access**: The SQL Server instance must have network access to the target API endpoint specified in `@api_url`.
+- **CLR Assembly**: The `db_automation` assembly containing the `StoredProcedures.call_rest_api` class must be deployed in the SQL Server database.
+- **SQL Server Version**: Compatibility with the SQL Server version where CLR integration is supported (e.g., SQL Server 2012 or later).
+
+## Parameter Table
+| Parameter       | Type             | Description                                                                 | Default Value |
+|-----------------|------------------|-----------------------------------------------------------------------------|---------------|
+| `@api_url`      | `nvarchar(4000)` | The URL of the REST API endpoint to call.                                   | None          |
+| `@content`      | `nvarchar(max)`  | The request body content, typically used for POST or PUT requests.          | None          |
+| `@headers`      | `nvarchar(4000)` | Custom HTTP headers in a string format (e.g., `'Content-Type: application/json'`). | `N''`         |
+| `@method`       | `nvarchar(4000)` | The HTTP method for the request (e.g., `GET`, `POST`, `PUT`, `DELETE`).     | `N'GET'`      |
+| `@content_type` | `nvarchar(4000)` | The content type of the request body (e.g., `application/json`).            | `N''`         |
+| `@encode`       | `nvarchar(4000)` | The encoding type for the request content (if applicable).                  | `N''`         |
+| `@accept`       | `nvarchar(4000)` | The expected response content type (e.g., `application/json`).              | `N''`         |
+| `@useragent`    | `nvarchar(4000)` | The user-agent string for the HTTP request.                                 | `N''`         |
+| `@api_return`   | `nvarchar(max)`  | Output parameter that captures the response from the API call.              | None          |
+
+## Usage
+Call any REST API with standard parameters.
+### Examples:
+```sql
+declare @api_return nvarchar(max),@api_uri varchar(4000)
+set @api_uri='https://data.nasdaq.com/api/v3/datatables/NDW/EQTA?date=2025-08-29&symbol=GOOGL-US&api_key=JwPfRGfkZRN48zKfDTvL'
+exec [up_call_rest_api] @api_url=@api_uri,@content='',@api_return=@api_return output
+select @api_return
 
 ### Advanced Usage
    This is for test
