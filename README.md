@@ -3,7 +3,7 @@
 ## Table of Contents
 
 - [Introduction](#introduction)
-- [Installation](#installation)
+- [Quick Start](#Quick-Start)
 - [Technical Documentation](#technical-documentation)
 - [Contributing](#contributing)
 - [License](#license)
@@ -39,7 +39,8 @@ It is designed to execute SQL functions or queries as batches across multiple SQ
 - **PostgreSQL**
 - Extensible to other database systems with appropriate ODBC drivers.
 
-## Installation
+## Quick Start
+One SQL script completes the installation for a quick start in a database on MS SQL Server. 
 
 For detailed installation and setup instructions, refer to the [installation guide](installation.md).
 
