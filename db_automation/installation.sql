@@ -79,6 +79,23 @@ CREATE TABLE [dbo].[dblist](
 )WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
 ) ON [PRIMARY]
 GO
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE TABLE [dbo].[para_list](
+	[pname] [varchar](200) NOT NULL,
+	[pvalue] [nvarchar](4000) NOT NULL,
+ CONSTRAINT [PK_para_list] PRIMARY KEY CLUSTERED 
+(
+	[pname] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+GO
+
+
 
 SET ANSI_NULLS ON
 GO
@@ -204,70 +221,7 @@ SET IDENTITY_INSERT [dbo].[sql_functions] OFF
 GO
 SET ANSI_PADDING ON
 GO
-delete sql_functions where fn_name='refresh_instance'
-insert sql_functions (db_provider,fn_name,TheSQL) values('MSSQL','refresh_instance',
-N'create table #tmp_storage_info (dbs_used_GB smallmoney,os_free_GB smallmoney)
-if serverproperty(''EngineEdition'')>=8 
-   insert #tmp_storage_info select top 1 storage_space_used_mb/1024.00, (reserved_storage_mb-storage_space_used_mb)/1024.00 from master.sys.server_resource_stats order by start_time desc
-else
-   begin
-		SELECT distinct volume_mount_point,convert(money,(total_bytes-available_bytes)/1024/1024/1024.00) as dbs_used_GB, convert(money,available_bytes/1024/1024/1024.00) as os_free_GB into #tmp1
-		   FROM sys.master_files (nolock) AS f  CROSS APPLY sys.dm_os_volume_stats(f.database_id, f.file_id);  
-	  	insert #tmp_storage_info select sum(dbs_used_GB) as dbs_used_GB,sum(os_free_GB) as os_free_GB from #tmp1
-   end
-declare @certificates varchar(max)=(select name,expiry_date,convert(varchar(100),thumbprint,2) as thumbprint from master.sys.certificates where name not like ''##%'' for json path) 
-declare @isprimary tinyint=(SELECT case when role=1 then 1 else 0 end FROM sys.dm_hadr_availability_replica_states ars JOIN sys.availability_groups ag ON ars.group_id = ag.group_id AND ars.is_local = 1) 
-declare @nodelist varchar(max)=''''
-select @nodelist=@nodelist+member_name+'','' from sys.dm_hadr_cluster_members where member_type=0 and SERVERPROPERTY(''IsHadrEnabled'')=1
-if @@ROWCOUNT>0
-   set @nodelist=left(@nodelist,len(@nodelist)-1)
-else
-   set @nodelist=null
-select HOST_NAME() as Host,dbs_used_GB,os_free_GB,cpu_count,sqlserver_start_time as server_start_time,convert(int,physical_memory_kb/1024/1024) as physical_memory_GB,convert(varchar(500),SERVERPROPERTY(''InstanceDefaultDataPath'')) as DefaultDataPath,convert(varchar(500),SERVERPROPERTY(''InstanceDefaultLogPath'')) as DefaultLogPath,convert(varchar(500),SERVERPROPERTY(''InstanceDefaultBackupPath'')) as DefaultBackupPath,
-windows_release as os_version,@@version as db_instance_version,@certificates as [certificates], @nodelist as nodelist, (select top 1 dns_name,port from sys.availability_group_listeners for json path,WITHOUT_ARRAY_WRAPPER) as listeners,convert(nvarchar(500),COLLATIONPROPERTY(convert(nvarchar(500),SERVERPROPERTY(''Collation'')), ''CodePage'')) as [charset],convert(nvarchar(500),SERVERPROPERTY(''Collation'')) as [collation],isnull(@isprimary,0) as isprimary from sys.dm_os_windows_info os,sys.dm_os_sys_info dbsys, #tmp_storage_info s
-')
-
-insert sql_functions (db_provider,fn_name,TheSQL) values('MySQL','refresh_instance',
-N'SELECT @@hostname as Host,
-    sum((data_length + index_length) / 1024 / 1024/1024) AS dbs_used_GB,
-	null as os_free_GB,
-	null as cpu_count,
-	null as server_start_time,
-	null as physical_memory_GB,
-	@@datadir as DefaultDataPath,
-	@@datadir as DefaultLogPath,
-	null as DefaultBackupPath,
-	@@version_compile_os as os_version,
-	(SELECT VERSION()) AS db_instance_version,
-	N''{}'' as certificates,
-	null as nodelist,
-	null as listeners,
-    @@character_set_server AS charset,
-    @@collation_server AS collation,
-	1 as isprimary
-FROM information_schema.tables')
-insert sql_functions (db_provider,fn_name,TheSQL) values('PostgreSQL','refresh_instance',
-N'SELECT 
-    '''' AS host,
-    COALESCE(SUM(pg_database_size(datname)) / 1024.0 / 1024.0 / 1024.0,0) AS dbs_used_gb,
-    0 AS os_free_gb,
-    0 AS cpu_count,
-    pg_postmaster_start_time() AS server_start_time,
-    0 AS physical_memory_gb,
-    (SELECT COALESCE(setting,'''') FROM pg_settings WHERE name = ''data_directory'') AS defaultdatapath,
-    (SELECT COALESCE(setting,'''') FROM pg_settings WHERE name = ''log_directory'') AS defaultlogpath,
-    '''' AS defaultbackuppath,
-    '''' AS os_version,
-    version() AS db_instance_version,
-    ''{}'' AS certificates,
-    '''' AS nodelist,
-    '''' AS listeners,
-    (SELECT COALESCE(setting,'''') FROM pg_settings WHERE name = ''server_encoding'') AS charset,
-    (SELECT COALESCE(setting,'''') FROM pg_settings WHERE name = ''lc_collate'') AS collation,
-	1 as isprimary
-FROM pg_database
-WHERE datname NOT IN (''template0'', ''template1'');')
-	   
+   
 CREATE UNIQUE NONCLUSTERED INDEX [NonClusteredIndex_fn_name] ON [dbo].[sql_functions]
 (
 	[db_provider] ASC,
@@ -410,6 +364,27 @@ WITH EXECUTE AS CALLER
 AS
 EXTERNAL NAME [db_automation].[StoredProcedures].[call_rest_api]
 GO
+
+
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+ CREATE OR ALTER   function  [dbo].[fn_get_para_value]
+(@para_name varchar(300))
+RETURNS varchar(4000)
+AS
+BEGIN
+    declare @p_value varchar(4000)
+	select @p_value=pvalue from para_list where pname=@para_name
+
+	return @p_value
+end
+GO
+
 
 SET ANSI_NULLS ON
 GO
@@ -656,7 +631,173 @@ end catch
 
 GO
 
+	   
+SET ANSI_NULLS ON
+GO
 
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+
+CREATE OR ALTER         procedure [dbo].[up_call_os_cmd]
+@cmd nvarchar(4000),@json_input nvarchar(max)='{}',@cmd_return nvarchar(max)='{}' output,@error_msg nvarchar(max)='' output
+as
+declare @return_temp_table varchar(128)=N'',@max_threads int=5,
+@cmd_type tinyint=3,@dry_run bit=0,@debug bit=0,@log bit=1,@stop_by_error bit =1,
+@raise_error bit=0,@sql nvarchar(max)
+
+declare @success varchar(20)='success',@failed as varchar(20)='failed'
+
+declare @return int,@return_data nvarchar(max),@arguments nvarchar(max)
+declare @guid varchar(100)=replace(convert(varchar(50),newid()),'-',''),@the_date varchar(11)=format(getdate(),'yyyy_MM_dd_')
+set @error_msg=''
+if isnull(@cmd,'')=''
+   begin
+      raiserror('@cmd is empty!',16,1)
+      return -110
+   end
+if isjson(@json_input)=0
+   begin
+      raiserror('@json_input is not formatted as correct json!',16,1)
+      return -100
+   end
+set @arguments=isnull(JSON_VALUE(@json_input,N'$.arguments'),N'')
+set @return_temp_table=isnull(JSON_VALUE(@json_input,'$.return_temp_table'),'')
+set @dry_run=isnull(JSON_VALUE(@json_input,'$.dry_run'),0)
+set @debug=isnull(JSON_VALUE(@json_input,'$.debug'),0)
+set @log=isnull(JSON_VALUE(@json_input,'$.log'),1)
+set @raise_error=isnull(JSON_VALUE(@json_input,'$.raise_error'),0)
+if @return_temp_table<>''
+   begin
+      print @return_temp_table
+	  if object_id('tempdb..'+@return_temp_table) is null       
+	     begin
+			raiserror('Can not find out %s',16,1,@return_temp_table)
+			return -100
+		end   
+   end
+
+if object_id('tempdb..#remote_exec_content') is not null 
+   drop table #remote_exec_content
+
+create table #remote_exec_content (run_id uniqueidentifier not null default(newid()),Threads int default(10),servername varchar(128) default(''),IP_or_DNS varchar(500) default(''),dbname varchar(8000) default(''),TheSQL nvarchar(max),
+		[Port] varchar(10) default(''),db_provider varchar(50) default(''),db_driver varchar(100) default(''),username varchar(128) default(''),pwd varchar(128) default(''),connection_options varchar(500) default(''),cmd_type int default(0),arguments nvarchar(max) default(N''),
+		return_tmp_table varchar(max) default(''),[timeout] int default(120),debug bit default(0), remote_error nvarchar(max) default(N''),remote_output nvarchar(max) default(N''),affected_rows int default(0))
+
+insert #remote_exec_content (TheSQL,servername,username,Threads, cmd_type,arguments)
+	values(@cmd,@@servername,suser_sname(),1,@cmd_type,@arguments)
+if @dry_run=1
+   begin
+      select * from #remote_exec_content
+      return 0
+   end
+
+begin try
+exec @return=up_exec_remote_sql @return_msg=@error_msg out,@max_threads=@max_threads,@debug=@debug 
+if @return<>0
+   select @error_msg=@error_msg+char(13)+isnull(remote_error,N'')  from #remote_exec_content where isnull(remote_error,N'')<>N''
+update #remote_exec_content set pwd='*****************'
+if @log=1
+   insert remote_sql_log (run_id,servername,remote_user,sqlstring,errormsg) select run_id,servername,username, TheSQL,remote_error from #remote_exec_content
+
+if @return_temp_table<>''
+   begin
+        set @sql='if COL_LENGTH(''tempdb..'+@return_temp_table+''',''run_id'') is null alter table ['+@return_temp_table+'] add [run_id] uniqueidentifier;'
+		set @sql=@sql+'if COL_LENGTH(''tempdb..'+@return_temp_table+''',''remote_output'') is null alter table ['+@return_temp_table+'] add [remote_output] nvarchar(max);'
+		set @sql=@sql+'if COL_LENGTH(''tempdb..'+@return_temp_table+''',''remote_error'') is null alter table ['+@return_temp_table+'] add [remote_error] nvarchar(max);'
+		exec(@sql)
+		set @sql='insert ['+@return_temp_table+'] ([run_id],[remote_output],[remote_error]) select [run_id],[remote_output],[remote_error] from #remote_exec_content'
+		exec(@sql)
+   end
+
+select @cmd_return=isnull(remote_output,N'') from #remote_exec_content 
+
+if @debug=1
+   select * from #remote_exec_content
+return @return    
+end try
+begin catch
+  select @error_msg=ERROR_MESSAGE(), @cmd_return=N''
+  if @raise_error=1 throw 
+  return -102
+end catch
+
+GO
+
+
+
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE OR ALTER    procedure [dbo].[up_execute_ps]
+ @ps_scripts nvarchar(max),@return_temp_table varchar(128)='', @error_msg nvarchar(max)='' output,@ps_result nvarchar(max)='{}' output
+as
+declare @cmd varchar(5000)='',@return int,@json_input nvarchar(max)=N'{}',@ps nvarchar(max),@arguments nvarchar(max)
+set @error_msg=''
+if isnull(@ps_scripts,'')=''
+   begin
+       set @error_msg='@ps_scripts is null or empty!'
+	   return -100
+   end
+set @ps=N'try {'+@ps_scripts+N'}
+		  catch {Write-Output "PS exception: $($_.Exception.Message)";exit -100}'
+set @ps=replace(@ps,'"','\"')
+set @arguments='-command "& {'+@ps++'}"'
+
+set @cmd=N'powershell.exe'
+set @json_input=JSON_MODIFY(@json_input,'$.return_temp_table',@return_temp_table)
+set @json_input=JSON_MODIFY(@json_input,'$.arguments',@arguments)
+
+EXEC @return=[dbo].[up_call_os_cmd]
+    @cmd=@cmd,
+    @json_input = @json_input,
+    @cmd_return =@ps_result output,
+    @error_msg =@error_msg output
+
+return @return
+
+GO
+
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+CREATE OR ALTER      procedure [dbo].[up_execute_aws_cli]
+ @aws_cmd nvarchar(max),@profile varchar(400)='',@region varchar(50)='', @return_temp_table varchar(128)='', @error_msg nvarchar(max)='' output,@aws_result nvarchar(max)='{}' output
+as
+declare @cmd nvarchar(max)='',@return int,@json_input nvarchar(max)=N'{}',@arguments nvarchar(max)
+set @error_msg=''
+if isnull(@aws_cmd,'')=''
+   begin
+       set @error_msg='@aws_cmd is null or empty!'
+  return -100
+   end
+if @profile like '@%'
+   set @profile=[dbo].[fn_get_para_value](@profile)
+if isnull(@profile,'')<>''
+  set @aws_cmd=' --profile '+@profile
+if @region<>''
+ set @aws_cmd=' --region '+@region
+set @cmd=N'aws.exe'
+set @json_input=JSON_MODIFY(@json_input,'$.return_temp_table',@return_temp_table)
+set @json_input=JSON_MODIFY(@json_input,'$.arguments',@aws_cmd)
+
+EXEC @return=[dbo].[up_call_os_cmd]
+    @cmd=@cmd,
+    @json_input = @json_input,
+    @cmd_return =@aws_result output,
+    @error_msg =@error_msg output
+
+return @return
+
+GO
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
@@ -812,6 +953,71 @@ if @return=0 or @@ROWCOUNT>0
 else
    print @error_msg
 return 0
+
+GO
+delete sql_functions where fn_name='refresh_instance'
+insert sql_functions (db_provider,fn_name,TheSQL) values('MSSQL','refresh_instance',
+N'create table #tmp_storage_info (dbs_used_GB smallmoney,os_free_GB smallmoney)
+if serverproperty(''EngineEdition'')>=8 
+   insert #tmp_storage_info select top 1 storage_space_used_mb/1024.00, (reserved_storage_mb-storage_space_used_mb)/1024.00 from master.sys.server_resource_stats order by start_time desc
+else
+   begin
+		SELECT distinct volume_mount_point,convert(money,(total_bytes-available_bytes)/1024/1024/1024.00) as dbs_used_GB, convert(money,available_bytes/1024/1024/1024.00) as os_free_GB into #tmp1
+		   FROM sys.master_files (nolock) AS f  CROSS APPLY sys.dm_os_volume_stats(f.database_id, f.file_id);  
+	  	insert #tmp_storage_info select sum(dbs_used_GB) as dbs_used_GB,sum(os_free_GB) as os_free_GB from #tmp1
+   end
+declare @certificates varchar(max)=(select name,expiry_date,convert(varchar(100),thumbprint,2) as thumbprint from master.sys.certificates where name not like ''##%'' for json path) 
+declare @isprimary tinyint=(SELECT case when role=1 then 1 else 0 end FROM sys.dm_hadr_availability_replica_states ars JOIN sys.availability_groups ag ON ars.group_id = ag.group_id AND ars.is_local = 1) 
+declare @nodelist varchar(max)=''''
+select @nodelist=@nodelist+member_name+'','' from sys.dm_hadr_cluster_members where member_type=0 and SERVERPROPERTY(''IsHadrEnabled'')=1
+if @@ROWCOUNT>0
+   set @nodelist=left(@nodelist,len(@nodelist)-1)
+else
+   set @nodelist=null
+select HOST_NAME() as Host,dbs_used_GB,os_free_GB,cpu_count,sqlserver_start_time as server_start_time,convert(int,physical_memory_kb/1024/1024) as physical_memory_GB,convert(varchar(500),SERVERPROPERTY(''InstanceDefaultDataPath'')) as DefaultDataPath,convert(varchar(500),SERVERPROPERTY(''InstanceDefaultLogPath'')) as DefaultLogPath,convert(varchar(500),SERVERPROPERTY(''InstanceDefaultBackupPath'')) as DefaultBackupPath,
+windows_release as os_version,@@version as db_instance_version,@certificates as [certificates], @nodelist as nodelist, (select top 1 dns_name,port from sys.availability_group_listeners for json path,WITHOUT_ARRAY_WRAPPER) as listeners,convert(nvarchar(500),COLLATIONPROPERTY(convert(nvarchar(500),SERVERPROPERTY(''Collation'')), ''CodePage'')) as [charset],convert(nvarchar(500),SERVERPROPERTY(''Collation'')) as [collation],isnull(@isprimary,0) as isprimary from sys.dm_os_windows_info os,sys.dm_os_sys_info dbsys, #tmp_storage_info s
+')
+
+insert sql_functions (db_provider,fn_name,TheSQL) values('MySQL','refresh_instance',
+N'SELECT @@hostname as Host,
+    sum((data_length + index_length) / 1024 / 1024/1024) AS dbs_used_GB,
+	null as os_free_GB,
+	null as cpu_count,
+	null as server_start_time,
+	null as physical_memory_GB,
+	@@datadir as DefaultDataPath,
+	@@datadir as DefaultLogPath,
+	null as DefaultBackupPath,
+	@@version_compile_os as os_version,
+	(SELECT VERSION()) AS db_instance_version,
+	N''{}'' as certificates,
+	null as nodelist,
+	null as listeners,
+    @@character_set_server AS charset,
+    @@collation_server AS collation,
+	1 as isprimary
+FROM information_schema.tables')
+insert sql_functions (db_provider,fn_name,TheSQL) values('PostgreSQL','refresh_instance',
+N'SELECT 
+    '''' AS host,
+    COALESCE(SUM(pg_database_size(datname)) / 1024.0 / 1024.0 / 1024.0,0) AS dbs_used_gb,
+    0 AS os_free_gb,
+    0 AS cpu_count,
+    pg_postmaster_start_time() AS server_start_time,
+    0 AS physical_memory_gb,
+    (SELECT COALESCE(setting,'''') FROM pg_settings WHERE name = ''data_directory'') AS defaultdatapath,
+    (SELECT COALESCE(setting,'''') FROM pg_settings WHERE name = ''log_directory'') AS defaultlogpath,
+    '''' AS defaultbackuppath,
+    '''' AS os_version,
+    version() AS db_instance_version,
+    ''{}'' AS certificates,
+    '''' AS nodelist,
+    '''' AS listeners,
+    (SELECT COALESCE(setting,'''') FROM pg_settings WHERE name = ''server_encoding'') AS charset,
+    (SELECT COALESCE(setting,'''') FROM pg_settings WHERE name = ''lc_collate'') AS collation,
+	1 as isprimary
+FROM pg_database
+WHERE datname NOT IN (''template0'', ''template1'');')
 
 GO
 update serverlist set ip_or_dns='198.58.248.16' where ip_or_dns='192.168.68.103'
