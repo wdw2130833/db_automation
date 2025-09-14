@@ -66,9 +66,10 @@
      exec up_refresh_instances @remote_server='*'
      -- Refresh dblist for all databases on all live servers by this, or schedule this command as a SQL job:
      exec up_refresh_dblists @remote_server='*'
+
 ## Core stored procedures:
 
-# up_call_sqlfunction Stored Procedure
+# up_call_sqlfunction 
 
 ## Overview
 
@@ -138,7 +139,7 @@ EXEC [dbo].[up_call_sqlfunction]
 select * from #tmp_result
 ```
 
-# up_call_os_cmd Stored Procedure
+# up_call_os_cmd
 
 ## Overview
 
@@ -209,7 +210,7 @@ if @return<>0
 select * from #tmp_result
 ```
 
-# up_call_rest_api Stored Procedure
+# up_call_rest_api
 
 ## Overview
 The `up_call_rest_api` stored procedure is designed to facilitate HTTP requests to RESTful APIs from within a SQL Server environment. It allows users to send HTTP requests (e.g., GET, POST) to a specified API endpoint, customize headers, content, and other request parameters, and retrieve the API response. The procedure is implemented as an external CLR (Common Language Runtime) stored procedure, leveraging the `db_automation.StoredProcedures.call_rest_api` assembly.
