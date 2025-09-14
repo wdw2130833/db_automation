@@ -67,6 +67,7 @@
      -- Refresh dblist for all databases on all live servers by this, or schedule this command as a SQL job:
      exec up_refresh_dblists @remote_server='*'
 ## Core stored procedures:
+
 # up_call_sqlfunction Stored Procedure
 
 ## Overview
@@ -137,7 +138,10 @@ EXEC [dbo].[up_call_sqlfunction]
 select * from #tmp_result
 ```
 
+# up_call_os_cmd Stored Procedure
+
 ## Overview
+
 The `up_call_os_cmd` stored procedure executes an operating system command on local host, with configurable options provided via a JSON input. It supports logging, debugging, dry runs, and error handling, with results optionally stored in a temporary table.
 
 ## Parameters
