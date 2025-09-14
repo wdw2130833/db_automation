@@ -751,13 +751,7 @@ GO
 SET QUOTED_IDENTIFIER ON
 GO
 
-
-
-
-
---create table ps_commands (id int identity not null, ps_scripts nvarchar(max),insert_date datetime default getdate())
-
-CREATE OR ALTER    procedure [dbo].[up_execute_ps]
+CREATE OR ALTER    procedure [dbo].[up_execute_powershell]
  @ps_scripts nvarchar(max),@return_temp_table varchar(128)='#tmp_result', @error_msg nvarchar(max)='' output,@ps_result nvarchar(max)='{}' output
 as
 declare @cmd varchar(5000)='',@return int,@json_input nvarchar(max)=N'{}',@ps nvarchar(max),@arguments nvarchar(max)
