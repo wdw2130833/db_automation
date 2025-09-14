@@ -336,7 +336,7 @@ declare @api_return nvarchar(max),@api_uri varchar(4000)
 set @api_uri='https://data.nasdaq.com/api/v3/datatables/NDW/EQTA?date=2025-08-29&symbol=GOOGL-US&api_key=JwPfRGfkZRN48zKfDTvL'
 exec [up_call_rest_api] @api_url=@api_uri,@content='',@api_return=@api_return output
 select @api_return
-
+```
 ### Advanced Usage
    This is for test
 ### Example Use Cases
