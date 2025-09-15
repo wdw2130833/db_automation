@@ -51,7 +51,7 @@ For detailed installation and setup instructions, refer to the [installation gui
 
 ## Technical Documentation
 
-For detailed usages and examples, refer to the [Documentation guide](db_automation_documentation.md).
+For detailed usages and examples, refer to the [Documentation guide](technical_documentation.md).
 
 ### Example Use Cases
 1. **Generate a Report**:
