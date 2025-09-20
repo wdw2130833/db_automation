@@ -297,7 +297,7 @@ select @api_return
 
 ## Stored Procedures for MS SQLServer
 # up_synch_backup_history
-This stored procedure synchronizes backup history data from SQL Server's `msdb` database into a `backup_history` table, filtering by specified parameters such as remote servers, backup age, and retention period.
+This stored procedure synchronizes backup history data from SQL Server's `msdb` database into a `backup_history` table, filtering by specified parameters such as remote servers, backup age, and retention period. It supports all backups from servers in high availability groups. 
 
 ## Parameters
 
