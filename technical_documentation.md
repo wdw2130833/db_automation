@@ -1,4 +1,4 @@
-# Database Automation Platform documentation
+# Database Automation Platform Documentation
 
 ## Table of Contents
 
