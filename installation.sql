@@ -95,6 +95,31 @@ CREATE TABLE [dbo].[para_list](
 ) ON [PRIMARY]
 GO
 
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE TABLE [dbo].[auto_job_log](
+	[id] [int] IDENTITY(1,1) NOT NULL,
+	[jobname] [varchar](128) NULL,
+	[dbname] [varchar](128) NULL,
+	[commands] [nvarchar](max) NULL,
+	[running_token] [varchar](4000) NULL,
+	[createdate] [datetime] NULL,
+	[endtime] [datetime] NULL,
+	[error_msg] [nvarchar](max) NULL,
+ CONSTRAINT [PK_auto_job_log] PRIMARY KEY CLUSTERED 
+(
+	[id] DESC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+GO
+
+ALTER TABLE [dbo].[auto_job_log] ADD  DEFAULT (getdate()) FOR [createdate]
+GO
+
 
 
 SET ANSI_NULLS ON
@@ -6987,8 +7012,119 @@ while @@ROWCOUNT=1
 				select top 1 @servername=servername,@Instance_CPU=Instance_CPU,@Blocks=Blocks,@active_requests=active_requests from @alert_summary
    end              
  delete [WhoIsActive] where [collection_time]<getdate()-@keep_days
+GO
+
+
+
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+
+ CREATE OR ALTER   procedure [dbo].[up_run_as_job]
+   @sql nvarchar(max),
+   @running_token varchar(100)='',
+   @subsystem varchar(100)=N'TSQL',
+   @jobname varchar(200)='',
+   @database varchar(200)='',
+   @stop bit=0,
+   @log bit=1,
+   @debug bit=0
+as
+  declare @msg varchar(200)='' ,@log_id int=0,@tsql nvarchar(max)
+  declare @return int=0,@delete_level tinyint=3
+  if @debug=1
+     set @delete_level=0
+  if isnull(@database,'')=''
+     set @database='master'
+ 
+    DECLARE @jobId BINARY(16),@stop_job varchar(100)
+    declare @ReturnCode int
+    if @running_token is null
+       set @running_token=''
+    if isnull(@sql,'')=''
+	  begin
+			    set @msg ='@sql--- is null or empty!'
+				raiserror(@msg,16,1)    
+				return -100
+      end
+	 select @stop_job=name from msdb..sysjobs (nolock) where (name like 'Auto_Do_not_delete_%' or name=@jobname) and [description]=@running_token and [enabled]=0 and @running_token<>''
+	 if @@ROWCOUNT=1
+		begin
+			if @stop=1
+				begin
+						exec msdb..sp_delete_job @job_name=@stop_job
+						waitfor delay '00:00:20'
+							end
+			return 1  --last run still not completed   
+		end
+	if isnull(@jobname,'')=''
+       set @jobname='Auto_Do_not_delete_'+replace(@running_token,'%','')+'_'+CONVERT(varchar(50),newid())
+    if exists(select 1 from msdb..sysjobs where name=@jobname)
+       begin
+			set @msg ='Job name-'+@jobname+' is duplicated on '+@@servername
+				raiserror(@msg,16,1)    
+			return -100
+       end
+	if exists(select 1 from sys.objects where name='auto_job_log' and type='u') and @log=1
+		begin
+			insert auto_job_log (jobname,dbname,commands,running_token) values(@jobname,@database,@sql,@running_token)
+			set @log_id=SCOPE_IDENTITY()
+			set @tsql=N'
+			begin try
+				execute [{{@@database}}]..sp_executesql N''{{@@tsql}}'';
+				update auto_job_log set endtime=getdate() where id={{@@log_id}}
+			end try
+			begin catch
+				if @@TRANCOUNT > 0
+					rollback
+				update auto_job_log set endtime=getdate(),[error_msg]=ERROR_MESSAGE() where id={{@@log_id}}
+			end catch;'
+			set @tsql=replace (@tsql,'{{@@database}}',@database)
+			set @tsql=replace (@tsql,'{{@@log_id}}',convert(varchar,@log_id))
+			set @tsql=replace (@tsql,'{{@@tsql}}',replace(@sql,'''',''''''))
+			set @sql=@tsql
+			--print @tsql
+		end
+
+	BEGIN TRANSACTION
+	EXEC @ReturnCode =  msdb.dbo.sp_add_job @job_name=@jobname, @enabled=0,@owner_login_name='sa',@delete_level=@delete_level,@description=@running_token,@job_id = @jobId OUTPUT
+	IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback  --@delete_level=3,
+	EXEC @ReturnCode = msdb.dbo.sp_add_jobstep @job_id=@jobId, @step_name=@jobname, @step_id=1,@subsystem=@subsystem,@command=@sql,@database_name=@database,@flags=0
+	IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
+	EXEC @ReturnCode = msdb.dbo.sp_update_job @job_id = @jobId, @start_step_id = 1
+	IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
+	EXEC @ReturnCode = msdb.dbo.sp_add_jobserver @job_id = @jobId, @server_name = N'(local)'
+		IF (@@ERROR <> 0 OR @ReturnCode <> 0) GOTO QuitWithRollback
+	COMMIT TRANSACTION
+
+begin try
+	exec @return=msdb..sp_start_job @job_name=@jobname
+	if exists(select 1 from sys.objects where name='auto_job_log' and type='u')
+		begin
+			update auto_job_log set createdate=getdate() where id=@log_id
+			delete auto_job_log where createdate<getdate()-60
+		end  
+	return 0
+end try
+begin  catch
+	if exists(select 1 from sys.objects where name='auto_job_log' and type='u')
+	  update auto_job_log set createdate=getdate(),[error_msg]='Failed to start job:'+ERROR_MESSAGE()  where id=@log_id
+	return -200
+end catch
+QuitWithRollback:
+    IF (@@TRANCOUNT > 0) ROLLBACK TRANSACTION
+if exists(select 1 from sys.objects where name='auto_job_log' and type='u')
+	update auto_job_log set error_msg='Failed to create the job.' where id=@log_id
+return -100
+       
 
 
 GO
-		
+
+
+
 update serverlist set ip_or_dns='198.58.248.16' where ip_or_dns='192.168.68.103'
