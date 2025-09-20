@@ -47,7 +47,11 @@ This procedure is intended for long-running database tasks (e.g., schema migrati
 | `instance_types` | `varchar(4000)` | Comma-separated list of instance types or `'*'` for all. | `'*'` |
 | `db_types` | `varchar(4000)` | Comma-separated list of database types (`MSSQL`, `MySQL`, `PostgreSQL`) or `'*'` for all. | `'*'` |
 | `environment_or_list` | `nvarchar(max)` | Comma-separated list of environments or `'*'` for all. | `'*'` |
-| `cmd_type` | `tinyint` | Command type (0 for SQL execution, 1 for sqlcmd, mysql or psql, 2 for bcp, mysqldump or pg_dump, others reserved for future use). | `0` |
+| `cmd_type` | `varchar(20)` | Command type ( empty string for SQL execution, SQL_CMD for sqlcmd, mysql or psql, SQL_DUMP for bcp, mysqldump or pg_dump, OS_CMD for operation command application. Others reserved for future use). | `` |
+| `include_ag_node` | `bit` | Only apply for MSSQL. If `1`, including all ag nodes . | `0` |
+| `exclude_ag_listener` | `bit` | Only apply for MSSQL. If `1`, exclude ag listener. | `0` |
+| `sql_parameters` | `nvarchar(max)` | json key values for sql variables in query. | `` |
+| `arguments` | `nvarchar(max)` | extra aruments for SQL_CMD cmd type. | `` |
 | `dry_run` | `bit` | If `1`, simulate execution without running SQL. | `0` |
 | `debug` | `bit` | If `1`, output debug information from `#remote_exec_content`. | `0` |
 | `max_threads` | `int` | Maximum number of parallel threads for execution. Overrides server defaults. | `0` (uses server default, typically 5) |
