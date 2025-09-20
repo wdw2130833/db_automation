@@ -395,7 +395,7 @@ EXEC [dbo].[up_WhoIsActive_alert]
 
 - **Retention**: Data in `WhoIsActive` is deleted after `@keep_days` to manage storage.
 
-# up_run_as_job Procedure Documentation
+# up_run_as_job
 
 This stored procedure creates and executes a SQL Server Agent job to run a specified SQL command asynchronously. It supports logging job execution details, stopping existing jobs, and debugging options. The procedure is designed to handle dynamic SQL execution in a specified database, with automatic job cleanup and error handling.
 
