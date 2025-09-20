@@ -10,7 +10,9 @@
     - [up_call_rest_api](#up_call_rest_api)
 - [Stored Procedures for MS SQLServer](#Stored-Procedures-for-MS-SQLServer)
     - [up_synch_backup_history](#up_synch_backup_history)
-    - [up_WhoIsActive_alert](#up_WhoIsActive_alert) 
+    - [up_WhoIsActive_alert](#up_WhoIsActive_alert)
+    - [up_run_as_job](#up_run_as_job)
+    
 ## Fundamentals
 
 # up_call_sqlfunction
@@ -393,3 +395,75 @@ EXEC [dbo].[up_WhoIsActive_alert]
 
 - **Retention**: Data in `WhoIsActive` is deleted after `@keep_days` to manage storage.
 
+# up_run_as_job Procedure Documentation
+
+This stored procedure creates and executes a SQL Server Agent job to run a specified SQL command asynchronously. It supports logging job execution details, stopping existing jobs, and debugging options. The procedure is designed to handle dynamic SQL execution in a specified database, with automatic job cleanup and error handling.
+
+## Parameters
+
+| Parameter         | Type             | Description                                                                 | Default Value |
+|-------------------|------------------|-----------------------------------------------------------------------------|---------------|
+| `@sql`            | `nvarchar(max)`  | The SQL command to execute as a job step. Must be a valid SQL statement.     | None (required) |
+| `@running_token`  | `varchar(100)`   | A unique identifier for the job, used to track and stop existing jobs.       | '' |
+| `@subsystem`      | `varchar(100)`   | The SQL Server Agent subsystem to use for the job step (e.g., 'TSQL').       | 'TSQL' |
+| `@jobname`        | `varchar(200)`   | The name of the job. If not provided, a unique name is generated using `@running_token` and a GUID. | '' (auto-generated) |
+| `@database`       | `varchar(200)`   | The database in which to execute the SQL command.                            | 'master' |
+| `@stop`           | `bit`            | If set to 1, stops and deletes an existing job with the specified `@running_token`. | 0 |
+| `@log`            | `bit`            | If set to 1, logs job execution details to the `auto_job_log` table.        | 1 |
+| `@debug`          | `bit`            | If set to 1, disables automatic job deletion after completion for debugging purposes. | 0 |
+
+## Description
+
+The `up_run_as_job` stored procedure creates a SQL Server Agent job to execute a provided SQL command (`@sql`) asynchronously in the specified database (`@database`). It supports dynamic job naming, logging of execution details, and the ability to stop existing jobs based on a `running_token`. The procedure uses SQL Server Agent's `sp_add_job`, `sp_add_jobstep`, `sp_update_job`, and `sp_add_jobserver` to configure and start the job, with optional logging to the `auto_job_log` table.
+
+Key features:
+- **Job Creation**: Creates a temporary SQL Server Agent job with a unique name, either user-specified (`@jobname`) or auto-generated using `@running_token` and a GUID.
+- **Asynchronous Execution**: Executes the provided `@sql` command as a job step in the specified `@subsystem` (default: TSQL) and `@database`.
+- **Job Stopping**: If `@stop = 1` and a job with the matching `@running_token` exists, the procedure deletes the job and waits 20 seconds before proceeding.
+- **Logging**: If `@log = 1` and the `auto_job_log` table exists, logs job details (job name, database, command, and running token) and updates the log with start/end times or error messages.
+- **Error Handling**: Validates inputs (e.g., non-empty `@sql`), checks for duplicate job names, and handles errors during job creation or execution. Returns specific error codes (`-100`, `-200`) for different failure scenarios.
+- **Cleanup**: Deletes log entries in `auto_job_log` older than 60 days if logging is enabled. Jobs are automatically deleted after completion unless `@debug = 1`.
+- **Dynamic SQL for Logging**: If logging is enabled, wraps the `@sql` command in a try-catch block to capture errors and update the `auto_job_log` table.
+
+The procedure uses a transaction to ensure atomicity during job creation and rolls back on failure. It raises errors for invalid inputs (e.g., empty `@sql` or duplicate `@jobname`) and logs failures to `auto_job_log` if applicable.
+
+## Example Usage
+
+```sql
+-- Run a simple SQL command as a job in the master database
+EXEC [dbo].[up_run_as_job] 
+    @sql = N'SELECT * FROM sys.tables',
+    @running_token = 'TestRun_001',
+    @database = 'master';
+
+-- Run a command with logging and a custom job name
+EXEC [dbo].[up_run_as_job] 
+    @sql = N'EXEC sp_who',
+    @running_token = 'Monitor_002',
+    @jobname = 'CustomJob_002',
+    @database = 'msdb',
+    @log = 1;
+
+-- Stop an existing job with a specific running token
+EXEC [dbo].[up_run_as_job] 
+    @sql = N'SELECT 1',
+    @running_token = 'TestRun_001',
+    @stop = 1;
+```
+
+## Notes
+
+- **Dependencies**:
+  - Requires SQL Server Agent to be running and accessible.
+  - Assumes the existence of the `auto_job_log` table (if `@log = 1`) with columns for `jobname`, `dbname`, `commands`, `running_token`, `createdate`, `endtime`, and `error_msg`.
+  - Uses system stored procedures (`msdb.dbo.sp_add_job`, `sp_add_jobstep`, `sp_update_job`, `sp_add_jobserver`, `sp_start_job`, `sp_delete_job`).
+- **Error Handling**:
+  - Returns `-100` for invalid inputs (empty `@sql`, duplicate job name, or job creation failure).
+  - Returns `-200` if the job fails to start.
+  - Returns `1` if a job with the specified `@running_token` is still running and `@stop = 0`.
+  - Returns `0` on successful job creation and start.
+- **Job Deletion**: Jobs are deleted automatically after completion (`@delete_level = 3`) unless `@debug = 1` (sets `@delete_level = 0`).
+- **Logging**: If `@log = 1`, job execution details are stored in `auto_job_log`. Errors during execution or job creation are logged with appropriate error messages.
+- **Performance Considerations**: Creating and running SQL Server Agent jobs may introduce overhead, especially for frequent executions. Ensure SQL Server Agent is configured appropriately.
+
+- **Retention**: Log entries in `auto_job_log` are deleted after 60 days if logging is enabled.
