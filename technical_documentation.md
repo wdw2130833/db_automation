@@ -9,7 +9,8 @@
     - [up_execute_aws_cli](#up_execute_aws_cli)
     - [up_call_rest_api](#up_call_rest_api)
 - [Stored Procedures for MS SQLServer](#Stored-Procedures-for-MS-SQLServer)
-    - [up_synch_backup_history](#up_synch_backup_history) 
+    - [up_synch_backup_history](#up_synch_backup_history)
+    - [up_WhoIsActive_alert](#up_WhoIsActive_alert) 
 ## Fundamentals
 
 # up_call_sqlfunction
@@ -330,3 +331,65 @@ EXEC [dbo].[up_synch_backup_history] @remote_servers = 'Server1,Server2', @back_
 - The `JSON_MODIFY` function is used to configure input parameters for `[up_call_sqlfunction]`.
 - The procedure uses `MERGE` to upsert records into `backup_history` and deletes records older than `@keep_days`.
 - Error handling is minimal; the procedure checks the return value of `[up_call_sqlfunction]` but does not explicitly handle specific errors.
+
+# up_WhoIsActive_alert
+This stored procedure monitors SQL Server performance metrics using `sp_WhoIsActive` to detect high CPU usage, excessive active requests, or long-running blocking sessions. It generates alerts and sends email notifications with detailed reports when thresholds are exceeded. The procedure also maintains a history of alerts and performance data, with configurable retention periods.
+
+## Parameters
+
+| Parameter       | Type             | Description                                                                 | Default Value |
+|-----------------|------------------|-----------------------------------------------------------------------------|---------------|
+| `@remote_servers` | `nvarchar(4000)` | Specifies the server(s) to monitor for performance issues. Use '*' for all servers or a comma-separated list of server names. | '*' |
+| `@recipient`     | `varchar(8000)` | Email address(es) to receive alert notifications, separated by semicolons.   | 'dba@example.com;' |
+| `@keep_days`     | `int`           | Number of days to retain performance data in the `WhoIsActive` table. Older records are deleted. | 35 |
+| `@alert_para`    | `varchar(max)`  | JSON string defining alert thresholds and counts for triggering notifications. Must include `name`, `threshold`, and `counts` for each alert type (e.g., `High_CPU`, `Active_Requests`, `Blocks_Minutes`). | '{"alerts":[{"name":"High_CPU","threshold":85,"counts":2},{"name":"Active_Requests","threshold":100,"counts":3},{"name":"Blocks_Minutes","threshold":5,"counts":1}]}' |
+
+## Description
+
+The `up_WhoIsActive_alert` stored procedure monitors SQL Server performance by executing `sp_WhoIsActive` (or a custom implementation via `[up_call_sqlfunction]`) to collect data on CPU usage, active requests, and blocking sessions. It evaluates these metrics against thresholds defined in the `@alert_para` JSON input and generates email alerts for new, continuing, or resolved issues. The procedure stores performance data in the `WhoIsActive` table and alert history in the `alert_hist` table, with cleanup based on `@keep_days`.
+
+Key features:
+- **Alert Types**:
+  - `High_CPU`: Triggers when CPU usage exceeds the specified threshold (e.g., 85%) for a defined number of occurrences.
+  - `Active_Requests`: Triggers when the number of active requests exceeds the threshold (e.g., 100) for a defined number of occurrences.
+  - `Blocks_Minutes`: Triggers when blocking sessions persist longer than the threshold (e.g., 5 minutes) for a defined number of occurrences.
+- **Dynamic SQL**: Uses `sp_WhoIsActive` or a custom SQL query to collect performance data, executed via `[up_call_sqlfunction]`.
+- **Email Notifications**: Sends HTML-formatted emails with summary and detailed tables for triggered alerts, using `msdb.dbo.sp_send_dbmail`.
+- **Temporary Tables**:
+  - `#tmp_whoisactive`: Stores raw performance data from `sp_WhoIsActive`. The `run_id` column is modified to add a `servername` column if not present.
+  - `#tmp_alert`: Stores formatted alert data for email reports.
+  - `@alerts`, `@current_alerts`, `@alert_summary`, `@alert_list`: Table variables for processing alert thresholds and performance metrics.
+- **Data Retention**: Deletes records from `WhoIsActive` older than `@keep_days`.
+
+The procedure validates the `@alert_para` JSON input, populates alert thresholds, and processes performance data for each server. It generates alerts for new issues, resets alerts when conditions are resolved, and tracks continuing alerts. Emails include color-coded tables highlighting problematic metrics (e.g., red for high CPU, orange for blocks).
+
+## Example Usage
+
+```sql
+-- Monitor all servers with default thresholds and recipient
+EXEC [dbo].[up_WhoIsActive_alert] @remote_servers = '*', @recipient = 'dba@example.com;', @keep_days = 35;
+
+-- Monitor specific servers with custom thresholds
+EXEC [dbo].[up_WhoIsActive_alert] 
+    @remote_servers = 'Server1,Server2',
+    @recipient = 'admin@example.com;dba@example.com',
+    @keep_days = 60,
+    @alert_para = '{"alerts":[{"name":"High_CPU","threshold":90,"counts":2},{"name":"Active_Requests","threshold":50,"counts":2},{"name":"Blocks_Minutes","threshold":10,"counts":1}]}';
+```
+
+## Notes
+
+- **Dependencies**:
+  - Requires `sp_WhoIsActive` (from [GitHub](https://github.com/amachanic/sp_whoisactive)) or a compatible implementation in `[up_call_sqlfunction]`.
+  - Assumes the existence of `serverlist`, `dblist`, `alert_state`, `alert_hist`, and `WhoIsActive` tables with appropriate schemas.
+  - Uses `msdb.dbo.sp_send_dbmail` for email notifications, requiring Database Mail to be configured.
+
+- **Performance Considerations**: Running `sp_WhoIsActive` from local server may impact performance. Consider deploying `sp_WhoIsActive` on remote servers for efficiency.
+
+- **Alert Logic**:
+  - Alerts are triggered when thresholds are met for the specified number of occurrences (`counts`).
+  - Alerts are reset when conditions no longer apply, and a reset email is sent.
+  - Continuing alerts are tracked to avoid redundant notifications.
+
+- **Retention**: Data in `WhoIsActive` is deleted after `@keep_days` to manage storage.
+
