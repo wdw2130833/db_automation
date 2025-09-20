@@ -8,7 +8,8 @@
     - [up_execute_powershell](#up_execute_powershell)
     - [up_execute_aws_cli](#up_execute_aws_cli)
     - [up_call_rest_api](#up_call_rest_api)
-      
+- [Stored Procedures for MS SQLServer](#Stored-Procedures-for-MS-SQLServer)
+    - [up_synch_backup_history](#up_synch_backup_history) 
 ## Fundamentals
 
 # up_call_sqlfunction
@@ -293,3 +294,39 @@ set @api_uri='https://data.nasdaq.com/api/v3/datatables/NDW/EQTA?date=2025-08-29
 exec [up_call_rest_api] @api_url=@api_uri,@content='',@api_return=@api_return output
 select @api_return
 ```
+
+## Stored Procedures for MS SQLServer
+# up_synch_backup_history
+This stored procedure synchronizes backup history data from SQL Server's `msdb` database into a `backup_history` table, filtering by specified parameters such as remote servers, backup age, and retention period.
+
+## Parameters
+
+| Parameter       | Type             | Description                                                                 | Default Value |
+|-----------------|------------------|-----------------------------------------------------------------------------|---------------|
+| `@remote_servers` | `varchar(8000)` | Specifies the server(s) to include in the backup history synchronization. Use '*' for all servers or a comma-separated list of server names. | '*' |
+| `@back_days`     | `tinyint`       | Number of days to look back for backup history to synchronize.              | 7             |
+| `@keep_days`     | `int`           | Number of days to retain backup history records in the `backup_history` table. Older records are deleted. | 180           |
+
+## Description
+
+The `up_synch_backup_history` stored procedure retrieves backup history from `msdb.dbo.backupset` and `msdb.dbo.backupmediafamily` for databases in the `ONLINE` state with a recovery model other than `SIMPLE`. It filters backups based on the specified `@back_days` and excludes virtual devices (`device_type` not in 7). The results are merged into the `backup_history` table, and older records are deleted based on `@keep_days`.
+
+The procedure constructs a dynamic SQL query to gather backup details, including backup set ID, log sequence numbers (LSN), dates, type, size, and device information. It uses a JSON input configuration to pass parameters to a helper procedure `[up_call_sqlfunction]`. If the helper procedure executes successfully, the results are merged into the `backup_history` table, and outdated records are removed.
+
+## Example Usage
+
+```sql
+-- Synchronize backup history for all servers, looking back 7 days, and keeping records for 180 days
+EXEC [dbo].[up_synch_backup_history] @remote_servers = '*', @back_days = 7, @keep_days = 180;
+
+-- Synchronize backup history for specific servers, looking back 14 days, and keeping records for 90 days
+EXEC [dbo].[up_synch_backup_history] @remote_servers = 'Server1,Server2', @back_days = 14, @keep_days = 90;
+```
+
+## Notes
+
+- The procedure assumes the existence of a `backup_history` table with columns matching the fields inserted (`backup_set_id`, `first_lsn`, `last_lsn`, `backup_start_date`, `backup_finish_date`, `type`, `backup_size_kb`, `database_name`, `server_name`, `device_type`, `physical_device_name`, `family_sequence_number`).
+- The helper procedure `[up_call_sqlfunction]` is called to execute the dynamic SQL and return results to a temporary table `#tmp_result`.
+- The `JSON_MODIFY` function is used to configure input parameters for `[up_call_sqlfunction]`.
+- The procedure uses `MERGE` to upsert records into `backup_history` and deletes records older than `@keep_days`.
+- Error handling is minimal; the procedure checks the return value of `[up_call_sqlfunction]` but does not explicitly handle specific errors.
