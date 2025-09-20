@@ -228,6 +228,67 @@ CREATE UNIQUE NONCLUSTERED INDEX [NonClusteredIndex_fn_name] ON [dbo].[sql_funct
 	[fn_name] ASC
 )WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
 GO
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE TABLE [dbo].[backup_history](
+	[ID] [int] IDENTITY(1,1) NOT NULL,
+	[backup_set_id] [int] NOT NULL,
+	[first_lsn] [numeric](25, 0) NOT NULL,
+	[last_lsn] [numeric](25, 0) NOT NULL,
+	[backup_start_date] [datetime] NOT NULL,
+	[backup_finish_date] [datetime] NOT NULL,
+	[type] [char](1) NOT NULL,
+	[backup_size_kb] [int] NOT NULL,
+	[database_name] [nvarchar](128) NOT NULL,
+	[server_name] [nvarchar](128) NOT NULL,
+	[device_type] tinyint null,
+	[physical_device_name] [nvarchar](520) NOT NULL,
+	[family_sequence_number] [tinyint] NOT NULL,
+	[sync_status] [varchar](50) NOT NULL,
+	[last_update] [datetime] NOT NULL,
+ CONSTRAINT [PK_backup_history] PRIMARY KEY CLUSTERED 
+(	[ID] DESC)) ON [PRIMARY]
+GO
+
+ALTER TABLE [dbo].[backup_history] ADD  CONSTRAINT [DF_backup_history_family_sequence_number]  DEFAULT ((1)) FOR [family_sequence_number]
+GO
+
+ALTER TABLE [dbo].[backup_history] ADD  CONSTRAINT [DF_backup_history_sync_status]  DEFAULT ('waiting') FOR [sync_status]
+GO
+
+ALTER TABLE [dbo].[backup_history] ADD  CONSTRAINT [DF_backup_history_last_update]  DEFAULT (getdate()) FOR [last_update]
+GO
+
+CREATE UNIQUE NONCLUSTERED INDEX [UNIQUENonClusteredIndex-lsn] ON [dbo].[backup_history]
+(
+	[server_name] ASC,
+	[backup_set_id] ASC,
+	[type] ASC,
+	[database_name] ASC,
+	[last_lsn] ASC,
+	[family_sequence_number] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, IGNORE_DUP_KEY = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+GO
+
+SET ANSI_PADDING ON
+GO
+
+/****** Object:  Index [index_for_merge]    Script Date: 2025-09-19 9:03:16 PM ******/
+CREATE NONCLUSTERED INDEX [index_for_merge] ON [dbo].[backup_history]
+(
+	[last_lsn] ASC,
+	[type] ASC,
+	[database_name] ASC,
+	[server_name] ASC,
+	[family_sequence_number] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, SORT_IN_TEMPDB = OFF, DROP_EXISTING = OFF, ONLINE = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+GO
+
+	   
 ALTER TABLE [dbo].[dblist] ADD  CONSTRAINT [DF_dblist_db_type]  DEFAULT ('') FOR [db_type]
 GO
 ALTER TABLE [dbo].[dblist] ADD  CONSTRAINT [DF_dblist_is_primary]  DEFAULT ((1)) FOR [is_primary]
@@ -386,12 +447,11 @@ end
 GO
 
 
+
 SET ANSI_NULLS ON
 GO
-
 SET QUOTED_IDENTIFIER ON
 GO
-
 
 
 
@@ -402,7 +462,7 @@ as
 declare @servername_or_list varchar(max),@dbname_or_list nvarchar(max),@return_type nvarchar(100)='',@return_temp_table varchar(128)=N'',
 @instance_types varchar(4000)=N'*',@db_types varchar(4000)=N'*',@environment_or_list nvarchar(max)=N'*',@cmd_type varchar(20)='',
 @dry_run bit=0,@debug bit=0,@max_threads int=0,@timeout int=60,@include_remote_info bit=0,@log bit=1,@stop_by_error bit =1,
-@raise_error bit=0
+@raise_error bit=0,@include_ag_node bit=0,@exclude_ag_listener bit=0
 
 declare @MSSQL varchar(50) = 'MSSQL',@MySQL varchar(50) = 'MySQL',@PGSQL varchar(50) = 'PostgreSQL'  
 declare @success varchar(20)='success',@failed as varchar(20)='failed'
@@ -433,8 +493,11 @@ set @dbname_or_list=isnull(JSON_VALUE(@json_input,'$.dbname_or_list'),'')
 set @return_type=isnull(JSON_VALUE(@json_input,'$.return_type'),'')
 set @return_temp_table=isnull(JSON_VALUE(@json_input,'$.return_temp_table'),'')
 set @arguments=isnull(JSON_VALUE(@json_input,N'$.arguments'),N'')
+set @exclude_ag_listener=isnull(JSON_VALUE(@json_input,N'$.exclude_ag_listener'),0)
+set @include_ag_node=isnull(JSON_VALUE(@json_input,N'$.include_ag_node'),0)
 
 set @instance_types=isnull(JSON_VALUE(@json_input,'$.instance_types'),'*')
+
 set @db_types=isnull(JSON_VALUE(@json_input,'$.db_types'),'*')
 set @environment_or_list=isnull(JSON_VALUE(@json_input,'$.environment_or_list'),'*')
 
@@ -519,6 +582,8 @@ insert #remote_exec_content (Threads,servername,IP_or_DNS,dbname, [port], db_pro
 		s.servername,IP_or_DNS,d.dbname,[port_number],db_provider,odbc_driver,username,pwd,connection_options,
 		@timeout,@debug,@return_temp_table,@cmd_type,@arguments
 			from serverlist s,dblist d where d.servername=s.servername 
+			and @include_ag_node=case when ag_listener='' then @include_ag_node else ag_node end
+			and @exclude_ag_listener=case when ag_listener='' then @exclude_ag_listener when d.servername=ag_listener then 0 else 1 end
 			and (@all_instance_types=1 or exists(select 1 from @instance_type_list i where (s.instance_options & i.id)>0))
 			and (@all_environments=1 or exists(select 1 from @environment_list e where (s.environment_options & e.id)>0))
 			and (@all_dbs=1 or exists(select 1 from @db_list dl where dl.dbname=d.dbname))
@@ -565,10 +630,10 @@ if exists(select 1 from #remote_exec_content where TheSQL is null)
 			return -101
 		end
 
-if @json_input<>'{}'
+if isnull(json_value(@json_input,'$.sql_parameters'),'')<>''
 	begin
 		update r set TheSQL=replace(TheSQL,'$('+j.[key] COLLATE SQL_Latin1_General_CP1_CI_AS+')',j.[value] COLLATE SQL_Latin1_General_CP1_CI_AS) 	
-			from #remote_exec_content r, openjson(@json_input) j 
+			from #remote_exec_content r, openjson(@json_input,'$.sql_parameters') j 
 		set @json_input='{}'
 	end  
 set @mssql_template=N'
@@ -642,13 +707,6 @@ begin catch
 end catch
 
 GO
-
-SET ANSI_NULLS ON
-GO
-
-SET QUOTED_IDENTIFIER ON
-GO
-
 
 
 
@@ -1040,4 +1098,51 @@ FROM pg_database
 WHERE datname NOT IN (''template0'', ''template1'');')
 
 GO
+
+
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+ CREATE OR ALTER       procedure [dbo].[up_synch_backup_history]
+ @remote_servers varchar(8000)='*',@back_days tinyint=7,@keep_days int=180
+as
+
+declare @json_input nvarchar(max)='{}',@DBName nvarchar(4000)='master',
+    @Error_MSG nvarchar(max), @the_sql nvarchar(max)='',@return int,@failed varchar(10)='failed',@success varchar(10)='success'
+
+set @the_sql='select [backup_set_id],convert(varchar(30),[first_lsn]),convert(varchar(30),[last_lsn]),[backup_start_date],[backup_finish_date],[type],[compressed_backup_size],[database_name],b.server_name,m.[device_type],m.[physical_device_name],m.family_sequence_number from '
+set @the_sql=@the_sql+'msdb.dbo.backupset (nolocK) b,msdb.dbo.backupmediafamily (nolocK)  m,sys.databases  (nolocK) d where d.name=b.database_name and d.state_desc=''ONLINE'' and d.recovery_model_desc<>''SIMPLE'''
+set @the_sql=@the_sql+' and m.media_set_id=b.media_set_id and m.device_type not in (7) and b.server_name=@@servername and b.backup_finish_date>dateadd(d,0-'+convert(varchar,@back_days)+',getdate())'
+
+set nocount on
+if object_id('tempdb..#tmp_result') is not null
+     drop table #tmp_result
+create table #tmp_result (run_id uniqueidentifier)
+
+set @json_input=JSON_MODIFY(@json_input,'$.servername_or_list',@remote_servers)
+set @json_input=JSON_MODIFY(@json_input,'$.dbname_or_list','default')
+set @json_input=JSON_MODIFY(@json_input,'$.return_temp_table','#tmp_result')
+set @json_input=JSON_MODIFY(@json_input,'$.include_remote_info',0)
+set @json_input=JSON_MODIFY(@json_input,'$.include_ag_node',1)
+set @json_input=JSON_MODIFY(@json_input,'$.exclude_ag_listener',1)
+set @json_input=JSON_MODIFY(@json_input,'$.db_types','MSSQL')
+
+exec @return=[up_call_sqlfunction] @the_sql=@the_sql,@json_input=@json_input,@error_msg=@error_msg out
+if @return<>0
+   begin
+		merge backup_history as t using (select * from #tmp_result) as s
+		   on t.[server_name]=s.[server_name] and t.[last_lsn]=s.[last_lsn] and t.[database_name]=s.[database_name] and t.type=s.type and t.family_sequence_number=s.family_sequence_number
+		when not matched then
+		   insert ([backup_set_id],[first_lsn],[last_lsn],[backup_start_date],[backup_finish_date],[type],backup_size_kb,[database_name],[server_name],[device_type],[physical_device_name],family_sequence_number)
+			   values (s.[backup_set_id],s.[first_lsn],s.[last_lsn],s.[backup_start_date],s.[backup_finish_date],s.[type],s.[backup_size]/1024,s.[database_name],s.[server_name],s.device_type,s.[physical_device_name],s.family_sequence_number); 
+		if @@ROWCOUNT>0
+		   delete backup_history where [backup_start_date]<getdate()-@keep_days
+   end
+return @return
+GO
+
+		
 update serverlist set ip_or_dns='198.58.248.16' where ip_or_dns='192.168.68.103'
