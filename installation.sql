@@ -7901,7 +7901,7 @@ begin try
 						set @return_json=JSON_MODIFY(@return_json,'$.step_id',@step_id)
 						update task_steps set return_json=@return_json,step_status=@running where step_id=@step_id
 					 end           
-				set @sql='exec automation..up_asynch_task_refresh @refresh_Requestid='+convert(varchar,@requestid)+',@refresh_step_id='+convert(varchar,@step_id)
+				set @sql='exec up_asynch_task_refresh @refresh_Requestid='+convert(varchar,@requestid)+',@refresh_step_id='+convert(varchar,@step_id)
 				set @running_token='refresh_Requestid='+convert(varchar,@requestid)+'--'+convert(varchar,@step_id)
 				exec [up_run_as_job] @sql=@sql,@running_token=@running_token,@debug=@debug
 			 end
@@ -7913,7 +7913,7 @@ begin try
 								print @sp_definition
 								print @return_json
                            end
-						EXECUTE @return=automation..sp_executesql @sp_definition, @para_definition, @return_json=@return_json output
+						EXECUTE @return=sp_executesql @sp_definition, @para_definition, @return_json=@return_json output
 						set @status=isnull(json_value(@return_json,'$.status'),'')
 						if @status='' 
 						   begin
