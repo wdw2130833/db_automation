@@ -413,7 +413,153 @@ GO
 ALTER TABLE [dbo].[WhoIsActive] ADD  CONSTRAINT [DF__WhoIsActi__used___3EE740E8]  DEFAULT ((0)) FOR [used_memory_delta]
 GO
 
+SET ANSI_NULLS ON
+GO
 
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE TABLE [dbo].[automation_requests](
+	[id] [int] IDENTITY(80002,1) NOT NULL,
+	[task_name] [varchar](100) NOT NULL,
+	[self_request_id] [int] NOT NULL,
+	[json_parameters] [varchar](8000) NOT NULL,
+	[requestdate] [datetime] NOT NULL,
+	[startdate] [datetime] NULL,
+	[status] [varchar](20) NOT NULL,
+	[last_check] [datetime] NULL,
+	[enddate] [datetime] NULL,
+	[return_json] [varchar](max) NOT NULL,
+	[priority] [tinyint] NOT NULL,
+	[requester] [varchar](100) NOT NULL,
+ CONSTRAINT [PK_automation_requests] PRIMARY KEY CLUSTERED 
+(
+	[id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+GO
+
+ALTER TABLE [dbo].[automation_requests] ADD  CONSTRAINT [DF_automation_requests_self_request_id]  DEFAULT ((0)) FOR [self_request_id]
+GO
+
+ALTER TABLE [dbo].[automation_requests] ADD  CONSTRAINT [DF_automation_requests_jason_parameters]  DEFAULT ('') FOR [json_parameters]
+GO
+
+ALTER TABLE [dbo].[automation_requests] ADD  CONSTRAINT [DF_automation_requests_requestdate]  DEFAULT (getdate()) FOR [requestdate]
+GO
+
+ALTER TABLE [dbo].[automation_requests] ADD  CONSTRAINT [DF_automation_requests_status]  DEFAULT ('Start') FOR [status]
+GO
+
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE TABLE [dbo].[task_list](
+	[task_name] [varchar](100) NOT NULL,
+	[sp_definition] [nvarchar](500) NOT NULL,
+	[para_definition] [nvarchar](1000) NOT NULL,
+	[remote_proc] [varchar](1000) NULL,
+	[enabled] [bit] NOT NULL,
+	[asynch] [bit] NOT NULL,
+	[check_interval_ss] [smallint] NOT NULL,
+	[refresh_by_job] [bit] NOT NULL,
+	[Internal_only] [bit] NOT NULL,
+	[after_hour] [bit] NOT NULL,
+	[actions] [varchar](max) NOT NULL,
+	[createdate] [datetime] NOT NULL,
+	[created_by] [varchar](128) NOT NULL,
+	[cross_region] [bit] NOT NULL,
+	[remote_steps] [varchar](max) NOT NULL,
+ CONSTRAINT [PK_task_list] PRIMARY KEY CLUSTERED 
+(
+	[task_name] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+GO
+
+ALTER TABLE [dbo].[task_list] ADD  CONSTRAINT [DF_task_list_remote_proc]  DEFAULT ('') FOR [remote_proc]
+GO
+
+ALTER TABLE [dbo].[task_list] ADD  CONSTRAINT [DF_task_list_enabled]  DEFAULT ((0)) FOR [enabled]
+GO
+
+ALTER TABLE [dbo].[task_list] ADD  CONSTRAINT [DF_task_list_asynch]  DEFAULT ((0)) FOR [asynch]
+GO
+
+ALTER TABLE [dbo].[task_list] ADD  CONSTRAINT [DF_task_list_check_interval_ss]  DEFAULT ((0)) FOR [check_interval_ss]
+GO
+
+ALTER TABLE [dbo].[task_list] ADD  CONSTRAINT [DF_task_list_refresh_by_job]  DEFAULT ((0)) FOR [refresh_by_job]
+GO
+
+ALTER TABLE [dbo].[task_list] ADD  CONSTRAINT [DF_task_list_Internal_only]  DEFAULT ((1)) FOR [Internal_only]
+GO
+
+ALTER TABLE [dbo].[task_list] ADD  CONSTRAINT [DF_task_list_after_hours]  DEFAULT ((1)) FOR [after_hour]
+GO
+
+ALTER TABLE [dbo].[task_list] ADD  CONSTRAINT [DF_task_list_actions]  DEFAULT ('{}') FOR [actions]
+GO
+
+ALTER TABLE [dbo].[task_list] ADD  CONSTRAINT [DF_task_list_createdate]  DEFAULT (getdate()) FOR [createdate]
+GO
+
+ALTER TABLE [dbo].[task_list] ADD  CONSTRAINT [DF_task_list_created_by]  DEFAULT (suser_sname()) FOR [created_by]
+GO
+
+ALTER TABLE [dbo].[task_list] ADD  CONSTRAINT [DF_task_list_cross_region]  DEFAULT ((0)) FOR [cross_region]
+GO
+
+ALTER TABLE [dbo].[task_list] ADD  CONSTRAINT [DF_task_list_remote_steps]  DEFAULT ('{}') FOR [remote_steps]
+GO
+
+
+ALTER TABLE [dbo].[automation_requests] ADD  CONSTRAINT [DF_automation_requests_return_msg]  DEFAULT ('{}') FOR [return_json]
+GO
+
+ALTER TABLE [dbo].[automation_requests] ADD  CONSTRAINT [DF_automation_requests_priority]  DEFAULT ((5)) FOR [priority]
+GO
+
+ALTER TABLE [dbo].[automation_requests] ADD  CONSTRAINT [DF_automation_requests_requester]  DEFAULT (suser_sname()) FOR [requester]
+GO
+
+ALTER TABLE [dbo].[automation_requests]  WITH CHECK ADD  CONSTRAINT [CK_automation_requests] CHECK  ((isjson([return_json])=(1)))
+GO
+
+ALTER TABLE [dbo].[automation_requests] CHECK CONSTRAINT [CK_automation_requests]
+GO
+
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE TABLE [dbo].[task_steps](
+	[id] [int] IDENTITY(1,1) NOT NULL,
+	[site_name] [varchar](20) NOT NULL,
+	[task_id] [int] NOT NULL,
+	[step_id] [int] NOT NULL,
+	[step_action] [varchar](max) NULL,
+	[step_status] [varchar](20) NOT NULL,
+	[sync_status] [varchar](20) NOT NULL,
+	[return_json] [varchar](max) NOT NULL,
+	[startdate] [datetime] NOT NULL,
+	[enddate] [datetime] NULL,
+ CONSTRAINT [PK_task_steps] PRIMARY KEY CLUSTERED 
+(
+	[site_name] ASC,
+	[task_id] ASC,
+	[step_id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+GO
+
+ALTER TABLE [dbo].[task_steps] ADD  CONSTRAINT [DF_task_steps_startdate]  DEFAULT (getdate()) FOR [startdate]
+GO
 	   
 ALTER TABLE [dbo].[dblist] ADD  CONSTRAINT [DF_dblist_db_type]  DEFAULT ('') FOR [db_type]
 GO
