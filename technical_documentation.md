@@ -12,7 +12,7 @@
     - [up_synch_backup_history](#up_synch_backup_history)
     - [up_WhoIsActive_alert](#up_WhoIsActive_alert)
     - [up_run_as_job](#up_run_as_job)
-    
+    - [up_asynch_task_refresh](#up_asynch_task_refresh)
 ## Fundamentals
 
 # up_call_sqlfunction
@@ -467,3 +467,81 @@ EXEC [dbo].[up_run_as_job]
 - **Performance Considerations**: Creating and running SQL Server Agent jobs may introduce overhead, especially for frequent executions. Ensure SQL Server Agent is configured appropriately.
 
 - **Retention**: Log entries in `auto_job_log` are deleted after 60 days if logging is enabled.
+
+# up_asynch_task_refresh
+
+This stored procedure manages the asynchronous execution of tasks and task steps defined in the `automation_requests` and `task_steps` tables. It supports both local and remote task execution, with options for running tasks as SQL Server Agent jobs, handling task status updates, and logging errors. The procedure is designed to process tasks based on priority and execution timing, with support for debugging. It will process long-run db tasks by asynchronous execution of a SQL agnet job. Also it can hanlde the automated db tasks cross multi regions in predefined task steps and return the results and errors in all task steps. Nomrally this procedure needs to be scheduled to run, then it can start new tasks, check running tasks and refresh the status for long-time running tasks automatically. It's a core component to manage and implement automated db tasks based on multi db instances, multi envornments and regions in distributed system. 
+
+## Parameters
+
+| Parameter              | Type             | Description                                                                 | Default Value |
+|------------------------|------------------|-----------------------------------------------------------------------------|---------------|
+| `@refresh_Requestid`   | `int`            | The ID of the specific request to process. If NULL, processes all eligible requests. | NULL |
+| `@refresh_step_id`     | `int`            | The ID of the specific task step to process. If NULL, processes all eligible steps. | NULL |
+| `@debug`               | `bit`            | If set to 1, enables debug mode, printing the stored procedure definition and JSON output instead of executing. | 0 |
+
+## Description
+
+The `up_asynch_task_refresh` stored procedure handles the asynchronous execution of tasks and task steps defined in the `automation_requests` and `task_steps` tables. It supports both local and remote task execution, with tasks either executed directly via dynamic SQL or as SQL Server Agent jobs using the `up_run_as_job` procedure. The procedure processes tasks based on priority, execution timing, and status, updating task statuses and logging results in JSON format.
+
+Key features:
+- **Task Selection**: Identifies eligible tasks from `automation_requests` and `task_steps` based on conditions such as `enabled=1`, `asynch=1` or non-empty `return_json.return_file`, and timing constraints (`startdate`, `last_check`, `check_interval_ss`). Tasks are prioritized by the `priority` column and `last_check` or `startdate`.
+- **Remote Task Handling**: If `@refresh_Requestid` is NULL and cross-region tasks exist, calls `up_sync_tasks_control_file` and `up_remote_tasks_control` to synchronize tasks between remote regions.
+- **Asynchronous Execution**: For tasks with `refresh_by_job=1`, invokes `up_run_as_job` to execute the task as a SQL Server Agent job with a unique `running_token`. Otherwise, executes the task directly using `sp_executesql`.
+- **Status Management**: Updates task statuses in `automation_requests` or `task_steps` to `running`, `success`, `failed`, `Waiting_sync`, or `synced` based on execution outcomes. Updates `enddate` and `return_json` accordingly.
+- **Error Handling**: Uses try-catch blocks to capture and log errors. Errors are stored in `return_json` with a message and logged via `up_log_error`. Returns `-100` on failure.
+- **Debugging**: If `@debug=1`, prints the stored procedure definition and JSON output instead of executing the task.
+- **Task Step Management**: For tasks in `task_steps`, ensures steps are processed sequentially by deleting steps from the checklist if earlier steps are still pending.
+- **JSON Output**: Stores execution results and status in the `return_json` column, using `JSON_MODIFY` to update fields like `status`, `step_id`, and `msg`.
+
+The procedure processes tasks in a loop, selecting one task or step at a time, executing it, updating its status, and removing it from the checklist until no tasks remain. It ensures atomicity for direct executions using try-catch and delegates job-based executions to `up_run_as_job`.
+
+## Example Usage
+
+```sql
+-- Process all eligible tasks and steps
+EXEC [dbo].[up_asynch_task_refresh];
+
+-- Process a specific request
+EXEC [dbo].[up_asynch_task_refresh] 
+    @refresh_Requestid = 1001;
+
+-- Process a specific task step
+EXEC [dbo].[up_asynch_task_refresh] 
+    @refresh_Requestid = -2001, 
+    @refresh_step_id = 1;
+
+-- Run in debug mode to print task details
+EXEC [dbo].[up_asynch_task_refresh] 
+    @debug = 1;
+```
+
+## Notes
+
+- **Dependencies**:
+  - Requires access to `automation_requests` and `task_steps` tables with appropriate schemas.
+  - Uses `up_run_as_job` for job-based execution.
+  - Calls `up_sync_tasks_control_file` and `up_remote_tasks_control` for cross-region task synchronization.
+  - Uses `fn_get_para_value` to retrieve configuration parameters like `@site_name` and `@tasks_master`.
+  - Relies on system stored procedure `sp_executesql` for dynamic SQL execution.
+- **Error Handling**:
+  - Returns `-100` for errors, with details logged via `up_log_error` and stored in `return_json`.
+  - Captures errors during direct execution and updates `return_json` with error messages.
+- **Status Values**:
+  - `running`: Task or step is currently executing.
+  - `success`: Task or step completed successfully.
+  - `failed`: Task or step failed.
+  - `Waiting_sync`: Task or step completed and awaiting synchronization (for remote tasks).
+  - `synced`: Task or step has been synchronized.
+- **Performance Considerations**:
+  - Processing tasks in a loop may impact performance for large task sets. Ensure `check_interval_ss` is tuned to avoid excessive checks.
+  - Job-based execution via `up_run_as_job` introduces overhead due to SQL Server Agent job creation.
+- **Debugging**:
+  - Use `@debug=1` to inspect stored procedure definitions and JSON output without executing tasks.
+
+- **Task Steps**:
+  - Steps in `task_steps` are processed sequentially, with earlier steps blocking later ones if still pending.
+  - Negative `requestid` values in the checklist correspond to `task_id` from `task_steps`.
+- **JSON Handling**:
+  - The `return_json` column stores execution results and status, with fields like `status`, `step_id`, and `msg` updated dynamically.
+  
