@@ -237,9 +237,9 @@ public partial class StoredProcedures
                             if (This_Return.Result_Name.StartsWith("#"))  // return data back into temp table
                             {
                                 Return_Msg = Alter_Temp_Table(This_Return.Result_Name, TheReader, oConn);
-                                if (Return_Msg != "success") { return -10; }
+                                if (Return_Msg != success) { return -10; }
                                 Return_Msg = LoadDataTable(This_Return.Result_Name, TheReader, oConn);
-                                if (Return_Msg != "success") { return -10; }
+                                if (Return_Msg != success) { return -10; }
                             }
                             else   //return back directly
                             {
@@ -594,7 +594,7 @@ public partial class StoredProcedures
 
                 foreach (remote_execution This_execution in result_contents)
                 {
-                    if (This_execution.Remote_Error != success)
+                    if (This_execution.Status != success)
                     {
                         SqlContext.Pipe.Send(This_execution.Servername + "." + This_execution.DBname + " -- failed: " + This_execution.Remote_Error);
                         SqlContext.Pipe.Send(Environment.NewLine);
@@ -1079,7 +1079,11 @@ internal partial class ExecuteCMD
 
                 }
                 sArguments = sArguments + " " + sRemote_Execution.Arguments;
-                WriteFile(sInput_File, sRemote_Execution.SQL);
+                if (WriteFile(sInput_File, sRemote_Execution.SQL)!=0)
+                {
+                    sRemote_Execution.Status = failed;
+                    return;
+                }
             }
             else if (sRemote_Execution.CMD_Type == "SQL_DUMP")
             {
@@ -1181,7 +1185,7 @@ internal partial class ExecuteCMD
 
                 if (process.ExitCode == 0)
                 {
-                    sRemote_Execution.Remote_Error = success;
+                    sRemote_Execution.Status = success;
                     if (string.IsNullOrEmpty(sRemote_Execution.Remote_Output))
                     {
                         if (File.Exists(@sOutput_File))
@@ -1221,7 +1225,9 @@ internal partial class ExecuteCMD
             sRemote_Execution.Remote_Error = ex.Message;
         }
         if (string.IsNullOrEmpty(sRemote_Execution.Remote_Error))
-        { sRemote_Execution.Remote_Error = success; }
+        { sRemote_Execution.Status = success; }
+        else
+        { sRemote_Execution.Status = failed; }
     }
     private static string Format_SQL_Query(string The_SQL)
     {
@@ -1460,6 +1466,7 @@ internal partial class ExecuteSQL
                 {
                     string Errmsg = $"ODBC Error: {ex.Message}";
                     sRemote_Execution.Remote_Error = sRemote_Execution.Remote_Error + Errmsg + Environment.NewLine;
+
                 }
                 finally
                 {
@@ -1590,7 +1597,9 @@ internal partial class ExecuteSQL
             }
         }
         if (string.IsNullOrEmpty(sRemote_Execution.Remote_Error))
-        { sRemote_Execution.Remote_Error = success; }
+        { sRemote_Execution.Status = success; }
+        else
+        { sRemote_Execution.Status = failed; }
     }
     private void Add_Run_ID(DataTable this_dt)
     {
